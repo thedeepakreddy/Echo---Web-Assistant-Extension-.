@@ -75,9 +75,9 @@ ECHO understands natural language. Here is what you can ask it to do:
 
 While the ECHO Web Extension rules your browser, **ECHO Mac** (currently 90% complete) is about to rule your entire operating system.
 
-ECHO Mac is a super-autonomous desktop assistant being built to operate completely outside the browser. It features mind-blowing capabilities that will make it feel like you have a true AI engineer sitting inside your machine.
+ECHO Mac is a super-autonomous desktop assistant being built to operate completely outside the browser. It features mind-blowing capabilities that will make it feel like you have a true AI engineer sitting inside your machine. **Currently, ECHO Mac already boasts over 100+ active features.**
 
-**20 Mind-Blowing Features of ECHO Mac:**
+**20 of the Mind-Blowing Features of ECHO Mac:**
 1. **Full File-System Control:** Automatically read, write, and organize local files and folders.
 2. **Autonomous Software Engineer:** Clones repositories, reads Jira tickets, writes code, runs tests, and opens PRs completely unattended.
 3. **Vision OS Integration:** Natively sees the screen via Apple Screen Capture frameworks at 60fps.
