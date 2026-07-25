@@ -1,6 +1,6 @@
 # ECHO Web Assistant
 
-ECHO is a highly intelligent, voice-first autonomous browser assistant designed to fundamentally change how you interact with the web. Instead of manually clicking, typing, and searching, ECHO takes control of your browser to perform complex tasks entirely on its own.
+**E.C.H.O.** (Executive Computer Heuristics Operator) is a highly intelligent, voice-first autonomous browser assistant designed to fundamentally change how you interact with the web. Instead of manually clicking, typing, and searching, ECHO takes control of your browser to perform complex tasks entirely on its own.
 
 Built from the ground up by Deepak, ECHO leverages cutting-edge DOM manipulation, token-optimized machine vision, and real-time speech synthesis to act as a true digital companion inside your browser.
 
@@ -76,11 +76,5 @@ ECHO understands natural language. Here is what you can ask it to do:
 While the ECHO Web Extension rules your browser, **ECHO Mac** (currently 90% complete) is about to rule your entire operating system.
 
 ECHO Mac is a super-autonomous desktop assistant being built to operate completely outside the browser. It features mind-blowing capabilities that will make it feel like you have a true AI engineer sitting inside your machine.
-
-**Mind-Blowing Features of ECHO Mac:**
-* **Full File-System Control:** ECHO Mac will read, write, and manage your local files, automatically organizing your workspace and generating complex codebases on command.
-* **Terminal Mastery:** It will run bash scripts, compile code, execute Python scripts, and fix its own bugs completely autonomously.
-* **System-Wide Vision:** It can "see" your entire desktop environment, allowing it to interact with native applications, system settings, and desktop software.
-* **Endless Autonomy:** Give ECHO Mac a massive, multi-step goal before you go to sleep, and it will work overnight to research, code, test, and deploy software by the time you wake up.
 
 Stay tuned. The future of operating systems is arriving soon.
