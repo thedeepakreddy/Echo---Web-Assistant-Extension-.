@@ -77,4 +77,26 @@ While the ECHO Web Extension rules your browser, **ECHO Mac** (currently 90% com
 
 ECHO Mac is a super-autonomous desktop assistant being built to operate completely outside the browser. It features mind-blowing capabilities that will make it feel like you have a true AI engineer sitting inside your machine.
 
+**20 Mind-Blowing Features of ECHO Mac:**
+1. **Full File-System Control:** Automatically read, write, and organize local files and folders.
+2. **Autonomous Software Engineer:** Clones repositories, reads Jira tickets, writes code, runs tests, and opens PRs completely unattended.
+3. **Vision OS Integration:** Natively sees the screen via Apple Screen Capture frameworks at 60fps.
+4. **Deep System Control:** Direct integration with Spotify, Mail, Calendar, and System Preferences via AppleScript.
+5. **Always-On Context:** Constantly learns from everything you do on your Mac to build a personalized, local AI brain.
+6. **Local Sandbox Execution:** Safely tests untrusted code in Docker containers automatically.
+7. **Overnight Work Mode:** Give ECHO Mac a massive, multi-step goal before you go to sleep, and it will work overnight to finish it.
+8. **Self-Healing Code:** Automatically detects runtime errors in your local environment, analyzes the stack trace, and applies patches.
+9. **Native Desktop Voice:** Speaks directly through MacOS CoreAudio with ultra-low latency conversational capabilities.
+10. **Intelligent Screen OCR:** Instantly reads and extracts text from videos, images, and unselectable UI elements across the whole OS.
+11. **Cross-App Workflows:** Can move files from Finder into Photoshop, apply edits, and email the result without human intervention.
+12. **Automated Meeting Proxy:** Attends Zoom or Google Meet calls on your behalf, records transcripts, and extracts action items.
+13. **Local LLM Hosting:** Runs massive AI models entirely locally on Apple Silicon (M-series) to guarantee zero latency and 100% privacy.
+14. **Database Architect:** Connects to local PostgreSQL/MySQL databases, analyzes schemas, and writes complex SQL migrations on demand.
+15. **Proactive System Maintenance:** Monitors CPU, RAM, and disk space, automatically clearing caches and optimizing performance.
+16. **Dynamic UI Generation:** Instantly codes and renders custom SwiftUI or React widgets on your desktop to display data you ask for.
+17. **Continuous Deployment Agent:** Monitors your local git branches and auto-deploys to AWS/Vercel when tests pass.
+18. **Semantic File Search:** Stop searching by file name. Just say "Find the PDF where the lawyer talked about the severance package," and it finds it instantly.
+19. **Automated Social Engineering:** Can log into LinkedIn on your browser, find leads, and send personalized connection requests.
+20. **Self-Evolving Architecture:** ECHO Mac rewrites its own core logic scripts to optimize its speed based on your daily usage patterns.
+
 Stay tuned. The future of operating systems is arriving soon.
