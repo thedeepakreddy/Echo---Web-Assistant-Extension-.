@@ -1307,6 +1307,18 @@ let geminiClient = null;
 let currentGeminiConversation = [];
 let currentOpenAIConversation = []; // used by TogetherAI & OpenRouter
 let currentAbortController = null;
+// Aggressively prunes conversation to keep API tokens low while preserving tool call structures.
+function pruneConversation(conversation, maxRetained = 6) {
+    if (conversation.length > maxRetained) {
+        let sliced = conversation.slice(conversation.length - maxRetained);
+        // Ensure the first message is a user message so we don't break tool pairs
+        while (sliced.length > 0 && sliced[0].role !== 'user') {
+            sliced.shift();
+        }
+        return sliced.length > 0 ? sliced : [];
+    }
+    return conversation;
+}
 function abortCurrentWork() {
     if (currentAbortController) {
         currentAbortController.abort();
@@ -1396,6 +1408,7 @@ async function runClaudeLoop(client, userInput, tabId, signal, systemPrompt) {
                 });
             }
         });
+        currentConversation = pruneConversation(currentConversation, 6);
         currentConversation.push({ role: 'user', content: userInput });
         let isFinished = false;
         while (!isFinished) {
@@ -1494,6 +1507,7 @@ async function runGeminiLoop(client, userInput, tabId, signal, systemPrompt) {
                 });
             }
         });
+        currentGeminiConversation = pruneConversation(currentGeminiConversation, 6);
         currentGeminiConversation.push({ role: "user", parts: [{ text: userInput }] });
         let isFinished = false;
         const GEMINI_MODELS = [
@@ -1617,6 +1631,7 @@ async function runOpenAICompatibleLoop(endpoint, apiKey, model, userInput, tabId
                 parameters: t.schema
             }
         }));
+        currentOpenAIConversation = pruneConversation(currentOpenAIConversation, 6);
         currentOpenAIConversation.push({ role: 'user', content: userInput });
         let isFinished = false;
         while (!isFinished) {
