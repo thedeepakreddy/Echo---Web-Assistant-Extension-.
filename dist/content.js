@@ -31473,8 +31473,8 @@ function handleDomAction(action, args) {
             let screenInfo = 'Interactive Elements:\n';
             let count = 0;
             for (const el of interactables) {
-                if (count >= 60)
-                    break; // Hard limit to prevent token exhaustion
+                if (count >= 30)
+                    break; // Aggressive limit to prevent token exhaustion on free APIs
                 const rect = el.getBoundingClientRect();
                 // Only include elements mostly in viewport
                 if (rect.width > 0 && rect.height > 0 && rect.top >= -50 && rect.bottom <= window.innerHeight + 50) {
@@ -31483,14 +31483,14 @@ function handleDomAction(action, args) {
                     if (text) {
                         const cx = Math.round(rect.left + rect.width / 2);
                         const cy = Math.round(rect.top + rect.height / 2);
-                        screenInfo += `[${cx}, ${cy}] ${text.substring(0, 40)}\n`;
+                        screenInfo += `[${cx},${cy}] ${text.substring(0, 25)}\n`;
                         count++;
                     }
                 }
             }
-            // Add general page text for context (truncated heavily for free models)
+            // Add general page text for context (aggressively truncated for free models)
             let pageText = document.body.innerText || '';
-            pageText = pageText.replace(/\n\s*\n/g, '\n').substring(0, 1000);
+            pageText = pageText.replace(/\n\s*\n/g, '\n').substring(0, 400);
             const finalResult = screenInfo + '\n--- Text Context ---\n' + pageText;
             return { success: true, result: finalResult };
         }
