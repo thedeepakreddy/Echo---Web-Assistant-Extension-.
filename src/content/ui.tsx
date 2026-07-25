@@ -250,7 +250,7 @@ export function EchoUI() {
     >
       <iframe 
         ref={iframeRef}
-        src={chrome.runtime.getURL('speech.html')} 
+        src={typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL ? chrome.runtime.getURL('speech.html') : ''} 
         style={{ display: 'none' }}
         allow="microphone"
         title="ECHO Speech Sandbox"
