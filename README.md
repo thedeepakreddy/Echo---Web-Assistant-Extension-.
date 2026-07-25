@@ -26,6 +26,22 @@ ECHO supports seamless switching between the most powerful models in the world:
 4. **Google Gemini:** Supports Gemini 1.5 Pro, 2.0 Flash, and more.
 5. **Anthropic Claude:** The gold standard for reasoning (Claude 3.5 Sonnet).
 
+---
+
+## 🛠️ How to Install ECHO (Easy Setup)
+
+ECHO is a developer extension and takes just 30 seconds to install in your browser.
+
+1. **Download the File:** Go to the `package for sharing` folder in this repository and download the `Echo_Web_Assistant_v1.zip` file.
+2. **Extract it:** Unzip the downloaded file. Inside, you will see a folder named `dist`.
+3. **Open Extensions Page:** Open Chrome or Edge and go to `chrome://extensions/` (or `edge://extensions/`).
+4. **Enable Developer Mode:** Turn on the toggle switch for **Developer mode** in the top right corner.
+5. **Load the Extension:** Click the **Load unpacked** button in the top left corner, and select the `dist` folder you extracted earlier.
+
+That's it! ECHO is now installed. Pin the ECHO icon to your toolbar to easily access the Options menu.
+
+---
+
 ### How to Change the Brain & API Keys
 1. **Right-click** on the ECHO Extension icon in your Chrome toolbar.
 2. Click **Options**.
