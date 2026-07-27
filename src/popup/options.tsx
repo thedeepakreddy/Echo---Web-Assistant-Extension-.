@@ -35,15 +35,17 @@ function Options() {
   const [togetherModel, setTogetherModel] = useState(TOGETHER_MODELS[0].id);
   const [openrouterModel, setOpenrouterModel] = useState(OPENROUTER_MODELS[0].id);
   const [groqModel, setGroqModel] = useState(GROQ_MODELS[0].id);
+  const [handsfree, setHandsfree] = useState(false);
   const [status, setStatus] = useState('');
 
   useEffect(() => {
     chrome.storage.local.get([
       'provider', 'anthropicApiKey', 'geminiApiKey',
       'togetherApiKey', 'openrouterApiKey', 'groqApiKey',
-      'togetherModel', 'openrouterModel', 'groqModel'
+      'togetherModel', 'openrouterModel', 'groqModel', 'echo_handsfree'
     ], (result) => {
       if (result.provider) setProvider(result.provider as Provider);
+      if (result.echo_handsfree) setHandsfree(result.echo_handsfree as boolean);
       if (result.anthropicApiKey) setAnthropicApiKey(result.anthropicApiKey as string);
       if (result.geminiApiKey) setGeminiApiKey(result.geminiApiKey as string);
       if (result.togetherApiKey) setTogetherApiKey(result.togetherApiKey as string);
@@ -66,6 +68,7 @@ function Options() {
       togetherModel,
       openrouterModel,
       groqModel,
+      echo_handsfree: handsfree,
     }, () => {
       setStatus('✓ Saved!');
       setTimeout(() => setStatus(''), 2000);
@@ -183,6 +186,19 @@ function Options() {
         </>
       )}
 
+      <div className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
+        <input
+          id="handsfree"
+          type="checkbox"
+          checked={handsfree}
+          onChange={(e) => setHandsfree(e.target.checked)}
+          style={{ width: 'auto' }}
+        />
+        <label htmlFor="handsfree" style={{ margin: 0 }}>
+          Hands-free mode (auto-listen after ECHO replies)
+        </label>
+      </div>
+
       <button onClick={saveOptions} style={{ marginBottom: '10px' }}>Save Settings</button>
       {status && <span className="status-msg">{status}</span>}
 
@@ -190,13 +206,10 @@ function Options() {
 
       <button
         onClick={() => {
-          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs[0] && tabs[0].id) {
-              chrome.tabs.sendMessage(tabs[0].id, { type: 'WAKE_ECHO' }).catch(() => {
-                setStatus('Failed to wake. Refresh the page!');
-              });
-              window.close();
-            }
+          // Route through the background service worker so it flips the global
+          // wake state and broadcasts to the active tab's content script.
+          chrome.runtime.sendMessage({ type: 'WAKE_ECHO_REQUEST' }, () => {
+            window.close();
           });
         }}
         style={{ background: '#4a90e2' }}

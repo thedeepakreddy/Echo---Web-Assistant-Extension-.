@@ -8,7 +8,12 @@
     "scripting",
     "storage",
     "tabs",
-    "commands"
+    "commands",
+    "downloads",
+    "contextMenus",
+    "notifications",
+    "alarms",
+    "sidePanel"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -17,6 +22,9 @@
 
   "action": {
     "default_title": "Open ECHO Online"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "options_ui": {
     "page": "options.html",
@@ -46,6 +54,20 @@
         "mac": "Command+Shift+E"
       },
       "description": "Wake ECHO"
+    },
+    "open-panel": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+O",
+        "mac": "Command+Shift+O"
+      },
+      "description": "Open ECHO chat panel"
+    },
+    "command-palette": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Open ECHO command input on the page"
     }
   }
 }

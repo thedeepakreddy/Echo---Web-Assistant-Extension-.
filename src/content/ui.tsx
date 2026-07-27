@@ -25,6 +25,19 @@ export function EchoUI() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const logTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const handsfreeRef = useRef(false);
+  const visibleRef = useRef(false);
+  useEffect(() => { visibleRef.current = visible; }, [visible]);
+
+  // Hands-free mode: keep the setting in a ref so speech callbacks see it live.
+  useEffect(() => {
+    chrome.storage.local.get(['echo_handsfree'], (r) => { handsfreeRef.current = !!r.echo_handsfree; });
+    const onChanged = (changes: any, area: string) => {
+      if (area === 'local' && changes.echo_handsfree) handsfreeRef.current = !!changes.echo_handsfree.newValue;
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, []);
 
   const showLog = (text: string) => {
     setLogText(text);
@@ -122,11 +135,23 @@ export function EchoUI() {
         
         utterance.onend = () => {
           setStatus('idle');
+          // Hands-free: reopen the mic after ECHO finishes speaking so the
+          // user can keep the conversation going without clicking.
+          if (handsfreeRef.current && visibleRef.current) {
+            setTimeout(() => {
+              iframeRef.current?.contentWindow?.postMessage({ type: 'START_RECOGNITION' }, '*');
+            }, 400);
+          }
         };
-        
+
         window.speechSynthesis.speak(utterance);
       } else if (message.type === 'ECHO_SYNC_POSITION') {
         setPosition(message.position as { x: number, y: number });
+      } else if (message.type === 'ECHO_OPEN_PALETTE') {
+        // Cmd/Ctrl+Shift+K — reveal the orb and focus the text input.
+        setVisible(true);
+        setChatVisible(true);
+        setTimeout(() => inputRef.current?.focus(), 120);
       }
     };
     

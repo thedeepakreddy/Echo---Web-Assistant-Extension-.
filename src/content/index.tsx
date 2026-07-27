@@ -5,7 +5,8 @@ import { EchoUI } from './ui';
 
 // 1. Setup DOM Listener for AI Actions
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'EXECUTE_DOM_ACTION') {
+  // Background forwards page actions as { type: 'DOM_ACTION', action, args }.
+  if (message.type === 'DOM_ACTION') {
     try {
       const result = handleDomAction(message.action, message.args);
       sendResponse(result);

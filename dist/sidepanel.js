@@ -2,10 +2,10 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
-/***/ "./node_modules/css-loader/dist/cjs.js!./src/content/index.css"
-/*!*********************************************************************!*\
-  !*** ./node_modules/css-loader/dist/cjs.js!./src/content/index.css ***!
-  \*********************************************************************/
+/***/ "./node_modules/css-loader/dist/cjs.js!./src/popup/sidepanel.css"
+/*!***********************************************************************!*\
+  !*** ./node_modules/css-loader/dist/cjs.js!./src/popup/sidepanel.css ***!
+  \***********************************************************************/
 (module, __webpack_exports__, __webpack_require__) {
 
 __webpack_require__.r(__webpack_exports__);
@@ -21,287 +21,64 @@ __webpack_require__.r(__webpack_exports__);
 
 var ___CSS_LOADER_EXPORT___ = _node_modules_css_loader_dist_runtime_api_js__WEBPACK_IMPORTED_MODULE_1___default()((_node_modules_css_loader_dist_runtime_noSourceMaps_js__WEBPACK_IMPORTED_MODULE_0___default()));
 // Module
-___CSS_LOADER_EXPORT___.push([module.id, `/*
- * J.A.R.V.I.S — arc reactor HUD (Floating Content Script)
- */
-#echo-root-wrapper {
-  --size: 140px; /* slightly smaller for web overlay */
-  --glow: #52fefe;
-  --shell: #384c50;
-  --shell-dark: rgb(18, 20, 20);
-  --coil: #073c4b;
-  --spin: 8s;
-  --level: 0;
+___CSS_LOADER_EXPORT___.push([module.id, `* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0d0f14;
+  color: #e8eaed;
+}
+#echo-panel-root, .echo-panel { height: 100vh; display: flex; flex-direction: column; }
 
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: var(--size);
-  height: var(--size);
-  z-index: 2147483647;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  user-select: none;
-  
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.echo-panel-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; font-weight: 600; font-size: 15px;
+  border-bottom: 1px solid #1e2230; letter-spacing: 0.5px;
 }
+.echo-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #4a90e2; box-shadow: 0 0 8px #4a90e2;
+}
+.echo-clear {
+  margin-left: auto; background: transparent; color: #8a90a0;
+  border: 1px solid #2a2f3d; border-radius: 6px; padding: 4px 10px;
+  font-size: 12px; cursor: pointer;
+}
+.echo-clear:hover { color: #fff; border-color: #4a90e2; }
 
-#echo-root-wrapper * {
-  box-sizing: border-box;
+.echo-usage {
+  padding: 6px 14px; font-size: 11px; color: #7c8698;
+  border-bottom: 1px solid #1e2230; background: #0b0d12;
+  letter-spacing: 0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.echo-usage-session { color: #545c6b; }
 
-/* ---- log box (temporary toast messages) ---- */
-#echo-root-wrapper #echo-log-box {
-  position: absolute;
-  bottom: calc(var(--size) + 12px);
-  right: calc(var(--size) + 12px);
-  width: max-content;
-  max-width: 250px;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  border: 1px solid var(--glow);
-  padding: 8px 12px;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 13px;
-  line-height: 1.4;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(10px) scale(0.96);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
+.echo-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.echo-empty { color: #6b7280; font-size: 13px; text-align: center; margin-top: 30px; line-height: 1.6; }
 
-#echo-root-wrapper #echo-log-box.visible {
-  opacity: 1;
-  transform: translateY(0) scale(1);
+.echo-msg { display: flex; }
+.echo-msg.user { justify-content: flex-end; }
+.echo-msg.echo { justify-content: flex-start; }
+.echo-bubble {
+  max-width: 85%; padding: 9px 13px; border-radius: 14px;
+  font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
 }
+.echo-msg.user .echo-bubble { background: #4a90e2; color: #fff; border-bottom-right-radius: 4px; }
+.echo-msg.echo .echo-bubble { background: #191d28; color: #e8eaed; border-bottom-left-radius: 4px; }
 
-/* ---- chat box (long-press the core to reveal) ---- */
-#echo-root-wrapper #echo-chat-box {
-  position: absolute;
-  bottom: calc(var(--size) + 12px); /* pop up above reactor */
-  right: 0;
-  width: 300px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(10, 20, 24, 0.88);
-  border: 1px solid color-mix(in srgb, var(--glow) 45%, transparent);
-  box-shadow:
-    0 0 18px color-mix(in srgb, var(--glow) 30%, transparent),
-    0 10px 30px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  transition: all 0.2s ease-out;
-}
+.echo-status { color: #4a90e2; font-size: 12px; font-style: italic; padding: 2px 4px; }
 
-#echo-root-wrapper #echo-chat-box:not(.visible) {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(10px) scale(0.96);
+.echo-input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #1e2230; }
+.echo-input-row input {
+  flex: 1; background: #191d28; border: 1px solid #2a2f3d; color: #fff;
+  border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none;
 }
-
-#echo-root-wrapper #input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: #e8f4ff;
-  font-size: 14px;
+.echo-input-row input:focus { border-color: #4a90e2; }
+.echo-input-row button {
+  background: #4a90e2; color: #fff; border: none; border-radius: 10px;
+  width: 44px; font-size: 16px; cursor: pointer;
 }
-#echo-root-wrapper #input::placeholder {
-  color: rgba(232, 244, 255, 0.4);
-}
-
-#echo-root-wrapper #echo-send-btn {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  color: #04222b;
-  background: var(--glow);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--glow) 60%, transparent);
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 120ms ease;
-}
-#echo-root-wrapper #echo-send-btn:hover {
-  transform: scale(1.08);
-}
-#echo-root-wrapper #echo-send-btn:active {
-  transform: scale(0.94);
-}
-
-/* ---- reactor shell ---- */
-#echo-root-wrapper .reactor {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background-color: var(--shell);
-  border: 1px solid var(--shell-dark);
-  box-shadow:
-    0 0 26px 6px var(--shell-dark),
-    0 0 4px 1px var(--shell-dark) inset;
-  transition: box-shadow 200ms ease;
-}
-
-#echo-root-wrapper .circle {
-  border-radius: 50%;
-}
-#echo-root-wrapper .abs-center {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  margin: auto;
-}
-
-#echo-root-wrapper .reactor-inner {
-  width: 79.333%;
-  height: 79.333%;
-  background-color: rgb(22, 26, 27);
-  box-shadow: 0 0 4px 1px var(--glow);
-}
-
-#echo-root-wrapper .tunnel {
-  width: 73.333%;
-  height: 73.333%;
-  background-color: #fff;
-  box-shadow:
-    0 0 5px 1px var(--glow),
-    0 0 5px 4px var(--glow) inset;
-}
-
-#echo-root-wrapper .core-wrapper {
-  width: 60%;
-  height: 60%;
-  background-color: var(--coil);
-  box-shadow:
-    0 0 5px 4px var(--glow),
-    0 0 6px 2px var(--glow) inset;
-}
-
-#echo-root-wrapper .core-outer {
-  width: 40%;
-  height: 40%;
-  border: 1px solid var(--glow);
-  background-color: #fff;
-  box-shadow:
-    0 0 2px 1px var(--glow),
-    0 0 10px 5px var(--glow) inset;
-  cursor: pointer;
-}
-
-#echo-root-wrapper .core-inner {
-  width: 23.333%;
-  height: 23.333%;
-  border: 3px solid #1b4e5f;
-  background-color: #fff;
-  box-shadow:
-    0 0 7px 5px var(--glow),
-    0 0 10px 10px var(--glow) inset;
-  cursor: pointer;
-  transform: scale(calc(1 + var(--level) * 0.45));
-  transition: transform 90ms ease-out;
-}
-
-/* ---- rotating coils ---- */
-#echo-root-wrapper .coil-container {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  animation: reactor-spin var(--spin) infinite linear;
-}
-
-#echo-root-wrapper .coil {
-  position: absolute;
-  width: 10%;
-  height: 6.667%;
-  top: 13.333%;
-  left: 45%;
-  transform-origin: 50% 550%;
-  background-color: var(--coil);
-  box-shadow: 0 0 5px var(--glow) inset;
-}
-
-#echo-root-wrapper .coil-1 { transform: rotate(0deg); }
-#echo-root-wrapper .coil-2 { transform: rotate(45deg); }
-#echo-root-wrapper .coil-3 { transform: rotate(90deg); }
-#echo-root-wrapper .coil-4 { transform: rotate(135deg); }
-#echo-root-wrapper .coil-5 { transform: rotate(180deg); }
-#echo-root-wrapper .coil-6 { transform: rotate(225deg); }
-#echo-root-wrapper .coil-7 { transform: rotate(270deg); }
-#echo-root-wrapper .coil-8 { transform: rotate(315deg); }
-
-@keyframes reactor-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* ---- status colors ---- */
-#echo-root-wrapper[data-status="idle"] {
-  --glow: #52fefe;
-  --spin: 9s;
-}
-#echo-root-wrapper[data-status="listening"] {
-  --glow: #52fefe;
-  --spin: 4s;
-}
-#echo-root-wrapper[data-status="thinking"] {
-  --glow: #b388ff;
-  --spin: 2s;
-}
-#echo-root-wrapper[data-status="acting"] {
-  --glow: #7cf29a;
-  --spin: 1.1s;
-}
-#echo-root-wrapper[data-status="speaking"] {
-  --glow: #ffd479;
-  --spin: 3s;
-}
-#echo-root-wrapper[data-status="error"] {
-  --glow: #ff6b6b;
-  --spin: 0s;
-}
-
-/* Listening reads as a live, breathing reactor. */
-#echo-root-wrapper[data-status="listening"] .reactor,
-#echo-root-wrapper[data-status="speaking"] .reactor {
-  animation: reactor-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes reactor-pulse {
-  0%, 100% {
-    box-shadow:
-      0 0 26px 6px var(--shell-dark),
-      0 0 4px 1px var(--shell-dark) inset;
-  }
-  50% {
-    box-shadow:
-      0 0 40px 10px var(--glow),
-      0 0 4px 1px var(--shell-dark) inset;
-  }
-}
-
-/* A dead bridge must be obvious even with no text on screen. */
-#echo-root-wrapper[data-status="error"] .core-inner {
-  animation: reactor-alarm 0.9s steps(2, end) infinite;
-}
-@keyframes reactor-alarm {
-  0% { opacity: 1; }
-  100% { opacity: 0.35; }
-}
+.echo-input-row button:disabled { opacity: 0.4; cursor: default; }
 `, ""]);
 // Exports
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (___CSS_LOADER_EXPORT___);
@@ -31136,10 +30913,10 @@ if (false) // removed by dead control flow
 
 /***/ },
 
-/***/ "./src/content/index.css"
-/*!*******************************!*\
-  !*** ./src/content/index.css ***!
-  \*******************************/
+/***/ "./src/popup/sidepanel.css"
+/*!*********************************!*\
+  !*** ./src/popup/sidepanel.css ***!
+  \*********************************/
 (__unused_webpack_module, __webpack_exports__, __webpack_require__) {
 
 __webpack_require__.r(__webpack_exports__);
@@ -31158,7 +30935,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _node_modules_style_loader_dist_runtime_insertStyleElement_js__WEBPACK_IMPORTED_MODULE_4___default = /*#__PURE__*/__webpack_require__.n(_node_modules_style_loader_dist_runtime_insertStyleElement_js__WEBPACK_IMPORTED_MODULE_4__);
 /* harmony import */ var _node_modules_style_loader_dist_runtime_styleTagTransform_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! !../../node_modules/style-loader/dist/runtime/styleTagTransform.js */ "./node_modules/style-loader/dist/runtime/styleTagTransform.js");
 /* harmony import */ var _node_modules_style_loader_dist_runtime_styleTagTransform_js__WEBPACK_IMPORTED_MODULE_5___default = /*#__PURE__*/__webpack_require__.n(_node_modules_style_loader_dist_runtime_styleTagTransform_js__WEBPACK_IMPORTED_MODULE_5__);
-/* harmony import */ var _node_modules_css_loader_dist_cjs_js_index_css__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! !!../../node_modules/css-loader/dist/cjs.js!./index.css */ "./node_modules/css-loader/dist/cjs.js!./src/content/index.css");
+/* harmony import */ var _node_modules_css_loader_dist_cjs_js_sidepanel_css__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! !!../../node_modules/css-loader/dist/cjs.js!./sidepanel.css */ "./node_modules/css-loader/dist/cjs.js!./src/popup/sidepanel.css");
 
       
       
@@ -31178,12 +30955,12 @@ options.insert = _node_modules_style_loader_dist_runtime_insertBySelector_js__WE
 options.domAPI = (_node_modules_style_loader_dist_runtime_styleDomAPI_js__WEBPACK_IMPORTED_MODULE_1___default());
 options.insertStyleElement = (_node_modules_style_loader_dist_runtime_insertStyleElement_js__WEBPACK_IMPORTED_MODULE_4___default());
 
-var update = _node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js__WEBPACK_IMPORTED_MODULE_0___default()(_node_modules_css_loader_dist_cjs_js_index_css__WEBPACK_IMPORTED_MODULE_6__["default"], options);
+var update = _node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js__WEBPACK_IMPORTED_MODULE_0___default()(_node_modules_css_loader_dist_cjs_js_sidepanel_css__WEBPACK_IMPORTED_MODULE_6__["default"], options);
 
 
 
 
-       /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (_node_modules_css_loader_dist_cjs_js_index_css__WEBPACK_IMPORTED_MODULE_6__["default"] && _node_modules_css_loader_dist_cjs_js_index_css__WEBPACK_IMPORTED_MODULE_6__["default"].locals ? _node_modules_css_loader_dist_cjs_js_index_css__WEBPACK_IMPORTED_MODULE_6__["default"].locals : undefined);
+       /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (_node_modules_css_loader_dist_cjs_js_sidepanel_css__WEBPACK_IMPORTED_MODULE_6__["default"] && _node_modules_css_loader_dist_cjs_js_sidepanel_css__WEBPACK_IMPORTED_MODULE_6__["default"].locals ? _node_modules_css_loader_dist_cjs_js_sidepanel_css__WEBPACK_IMPORTED_MODULE_6__["default"].locals : undefined);
 
 
 /***/ },
@@ -31453,490 +31230,6 @@ function styleTagTransform(css, styleElement) {
 }
 module.exports = styleTagTransform;
 
-/***/ },
-
-/***/ "./src/content/actions.ts"
-/*!********************************!*\
-  !*** ./src/content/actions.ts ***!
-  \********************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   handleDomAction: () => (/* binding */ handleDomAction)
-/* harmony export */ });
-// ECHO content-script DOM engine.
-//
-// The agent "sees" the page through read_screen, which numbers every visible
-// interactive element and remembers them here. All follow-up actions
-// (click_element, type_text) address those numbers instead of raw x/y
-// coordinates — this is far more reliable than document.elementFromPoint,
-// which breaks with fixed headers, overlays, and any scrolling.
-let echoElements = [];
-const INTERACTIVE_SELECTOR = [
-    'a[href]', 'button', 'input', 'textarea', 'select',
-    '[role="button"]', '[role="link"]', '[role="tab"]', '[role="menuitem"]',
-    '[role="checkbox"]', '[role="radio"]', '[role="switch"]', '[role="option"]',
-    '[onclick]', '[contenteditable="true"]', '[contenteditable=""]'
-].join(',');
-const MAX_ELEMENTS = 25;
-const LABEL_MAX = 40;
-const PAGE_TEXT_MAX = 700;
-function isVisible(el) {
-    const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) {
-        return false;
-    }
-    const rect = el.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0)
-        return false;
-    // Must be at least partially within the viewport.
-    return rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
-}
-function describe(el) {
-    const tag = el.tagName.toLowerCase();
-    const anyEl = el;
-    let label = (anyEl.innerText ||
-        anyEl.value ||
-        el.getAttribute('aria-label') ||
-        el.getAttribute('placeholder') ||
-        el.getAttribute('title') ||
-        el.getAttribute('name') ||
-        el.getAttribute('alt') ||
-        '').replace(/\s+/g, ' ').trim();
-    // Note the kind of control so the model picks the right action.
-    let kind = tag;
-    if (tag === 'input')
-        kind = `input:${el.type || 'text'}`;
-    else if (el.getAttribute('role'))
-        kind = el.getAttribute('role');
-    else if (el.isContentEditable)
-        kind = 'editable';
-    if (!label)
-        label = kind;
-    return `<${kind}> "${label.substring(0, LABEL_MAX)}"`;
-}
-function handleDomAction(action, args) {
-    switch (action) {
-        case 'read_screen': {
-            echoElements = [];
-            const candidates = Array.from(document.querySelectorAll(INTERACTIVE_SELECTOR));
-            let screenInfo = 'Numbered interactive elements (use the number with click_element / type_text):\n';
-            for (const el of candidates) {
-                if (echoElements.length >= MAX_ELEMENTS)
-                    break;
-                if (!isVisible(el))
-                    continue;
-                // Skip elements whose only content is another interactive we already have
-                // (keeps the list focused on leaf controls).
-                const desc = describe(el);
-                const idx = echoElements.length;
-                echoElements.push(el);
-                screenInfo += `[${idx}] ${desc}\n`;
-            }
-            if (echoElements.length === 0) {
-                screenInfo += '(no interactive elements visible — try scrolling)\n';
-            }
-            let pageText = (document.body?.innerText || '').replace(/\n\s*\n/g, '\n').trim();
-            pageText = pageText.substring(0, PAGE_TEXT_MAX);
-            const url = location.href;
-            const title = document.title;
-            const result = `URL: ${url}\nTITLE: ${title}\n\n${screenInfo}\n--- Visible text (truncated) ---\n${pageText}`;
-            return { success: true, result };
-        }
-        case 'click_element': {
-            const idx = Number(args.index);
-            const el = echoElements[idx];
-            if (!el) {
-                return { success: false, error: `No element [${args.index}]. Call read_screen again to refresh the numbered list.` };
-            }
-            try {
-                el.scrollIntoView({ block: 'center', inline: 'center' });
-            }
-            catch { /* ignore */ }
-            const label = describe(el);
-            el.click();
-            return { success: true, result: `Clicked [${idx}] ${label}` };
-        }
-        case 'type_text': {
-            const idx = Number(args.index);
-            const el = echoElements[idx];
-            if (!el) {
-                return { success: false, error: `No element [${args.index}]. Call read_screen again to refresh the numbered list.` };
-            }
-            const text = String(args.text ?? '');
-            const el2 = el;
-            try {
-                el2.scrollIntoView({ block: 'center' });
-            }
-            catch { /* ignore */ }
-            el2.focus();
-            if (el2.isContentEditable) {
-                el2.textContent = text;
-                el2.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            else {
-                const input = el;
-                // Use the native value setter so React/Vue controlled inputs register the change.
-                const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-                const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-                if (setter)
-                    setter.call(input, text);
-                else
-                    input.value = text;
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-                input.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            if (args.submit) {
-                const opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true };
-                el2.dispatchEvent(new KeyboardEvent('keydown', opts));
-                el2.dispatchEvent(new KeyboardEvent('keypress', opts));
-                el2.dispatchEvent(new KeyboardEvent('keyup', opts));
-                const form = el.form;
-                if (form) {
-                    try {
-                        form.requestSubmit();
-                    }
-                    catch { /* ignore */ }
-                }
-            }
-            return { success: true, result: `Typed into [${idx}]${args.submit ? ' and submitted' : ''}` };
-        }
-        case 'press_key': {
-            const key = String(args.key || '');
-            const keyMap = {
-                Enter: 13, Escape: 27, Tab: 9, Backspace: 8, Delete: 46,
-                ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, ' ': 32
-            };
-            const code = keyMap[key] ?? 0;
-            const target = document.activeElement || document.body;
-            const opts = { key, code: key, keyCode: code, which: code, bubbles: true };
-            target.dispatchEvent(new KeyboardEvent('keydown', opts));
-            target.dispatchEvent(new KeyboardEvent('keypress', opts));
-            target.dispatchEvent(new KeyboardEvent('keyup', opts));
-            return { success: true, result: `Pressed ${key}` };
-        }
-        case 'scroll': {
-            window.scrollBy({ top: Number(args.amount) || 0, behavior: 'smooth' });
-            return { success: true, result: `Scrolled ${args.amount}px` };
-        }
-        case 'go_back': {
-            history.back();
-            return { success: true, result: 'Navigated back' };
-        }
-        case 'go_forward': {
-            history.forward();
-            return { success: true, result: 'Navigated forward' };
-        }
-        case 'find_on_page': {
-            const query = String(args.text || '').toLowerCase();
-            if (!query)
-                return { success: false, error: 'No text provided' };
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-            let node;
-            while ((node = walker.nextNode())) {
-                if (node.textContent && node.textContent.toLowerCase().includes(query)) {
-                    const el = node.parentElement;
-                    if (el && isVisible(el)) {
-                        el.scrollIntoView({ block: 'center' });
-                        const prevOutline = el.style.outline;
-                        el.style.outline = '3px solid #4a90e2';
-                        setTimeout(() => { el.style.outline = prevOutline; }, 3000);
-                        return { success: true, result: `Found "${args.text}": ${node.textContent.trim().substring(0, 120)}` };
-                    }
-                }
-            }
-            return { success: true, result: `"${args.text}" not found in visible text.` };
-        }
-        case 'get_page_text': {
-            const main = document.querySelector('article, main, [role="main"]');
-            const source = main && main.innerText.length > 200 ? main : document.body;
-            const text = (source?.innerText || '').replace(/\n\s*\n/g, '\n').trim().substring(0, 3000);
-            return { success: true, result: `TITLE: ${document.title}\n\n${text}` };
-        }
-        case 'extract_table': {
-            const tables = Array.from(document.querySelectorAll('table'));
-            if (tables.length === 0)
-                return { success: true, result: 'No tables found on this page.' };
-            const wanted = Number.isFinite(Number(args.index)) ? Number(args.index) : 0;
-            const table = tables[wanted] || tables[0];
-            const rows = Array.from(table.querySelectorAll('tr')).slice(0, 200).map(tr => Array.from(tr.querySelectorAll('th,td')).map(td => td.innerText.replace(/\s+/g, ' ').trim()));
-            return { success: true, result: JSON.stringify({ tableIndex: wanted, totalTables: tables.length, rows }) };
-        }
-        default:
-            throw new Error(`Unknown DOM action: ${action}`);
-    }
-}
-
-
-/***/ },
-
-/***/ "./src/content/ui.tsx"
-/*!****************************!*\
-  !*** ./src/content/ui.tsx ***!
-  \****************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   EchoUI: () => (/* binding */ EchoUI)
-/* harmony export */ });
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react/jsx-runtime */ "./node_modules/react/jsx-runtime.js");
-/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
-/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_1__);
-/* harmony import */ var _index_css__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./index.css */ "./src/content/index.css");
-
-
-
-function EchoUI() {
-    const [visible, setVisible] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)(false);
-    const [status, setStatus] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)('idle');
-    const [inputText, setInputText] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)('');
-    const [chatVisible, setChatVisible] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)(false);
-    const [logText, setLogText] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)('');
-    const [position, setPosition] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)({ x: window.innerWidth - 150, y: window.innerHeight - 150 });
-    const positionRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(position);
-    (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => { positionRef.current = position; }, [position]);
-    const isDraggingRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(false);
-    const dragStartPosRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)({ x: 0, y: 0 });
-    const dragStartMouseRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)({ x: 0, y: 0 });
-    const inputRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(null);
-    const submitBtnRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(null);
-    const iframeRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(null);
-    const pressTimerRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(null);
-    const logTimerRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(null);
-    const handsfreeRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(false);
-    const visibleRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(false);
-    (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => { visibleRef.current = visible; }, [visible]);
-    // Hands-free mode: keep the setting in a ref so speech callbacks see it live.
-    (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => {
-        chrome.storage.local.get(['echo_handsfree'], (r) => { handsfreeRef.current = !!r.echo_handsfree; });
-        const onChanged = (changes, area) => {
-            if (area === 'local' && changes.echo_handsfree)
-                handsfreeRef.current = !!changes.echo_handsfree.newValue;
-        };
-        chrome.storage.onChanged.addListener(onChanged);
-        return () => chrome.storage.onChanged.removeListener(onChanged);
-    }, []);
-    const showLog = (text) => {
-        setLogText(text);
-        if (logTimerRef.current)
-            clearTimeout(logTimerRef.current);
-        logTimerRef.current = setTimeout(() => {
-            setLogText('');
-        }, 4000);
-    };
-    // Listen to iframe sandbox for speech events
-    (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => {
-        const handleSandboxMessage = (event) => {
-            // Security: ensure it comes from our extension
-            if (event.origin !== `chrome-extension://${chrome.runtime.id}`)
-                return;
-            if (event.data.type === 'ECHO_SPEECH_START') {
-                setStatus('listening');
-            }
-            else if (event.data.type === 'ECHO_SPEECH_RESULT') {
-                setInputText(prev => prev + event.data.text + ' ');
-            }
-            else if (event.data.type === 'ECHO_SPEECH_ERROR') {
-                console.error('[ECHO Speech Error]', event.data.error);
-                setStatus('error');
-                setTimeout(() => setStatus('idle'), 2000);
-            }
-            else if (event.data.type === 'ECHO_SPEECH_END') {
-                setTimeout(() => {
-                    if (submitBtnRef.current)
-                        submitBtnRef.current.click();
-                }, 100);
-            }
-        };
-        window.addEventListener('message', handleSandboxMessage);
-        return () => window.removeEventListener('message', handleSandboxMessage);
-    }, []);
-    (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => {
-        // Check initial state
-        chrome.runtime.sendMessage({ type: 'CHECK_AWAKE_STATE' }, (response) => {
-            if (response?.isAwake)
-                setVisible(true);
-        });
-        // Load initial position
-        chrome.storage.local.get(['echo_position'], (res) => {
-            if (res.echo_position)
-                setPosition(res.echo_position);
-        });
-        const handleMessage = (message) => {
-            if (message.type === 'ECHO_GLOBAL_WAKE') {
-                setVisible(message.state);
-            }
-            else if (message.type === 'ECHO_STATE') {
-                if (message.state !== 'Idle')
-                    showLog(message.state);
-                // Map brain status to reactor status
-                if (message.state === 'Idle') {
-                    if (!window.speechSynthesis.speaking)
-                        setStatus('idle');
-                }
-                else if (message.state === 'Error') {
-                    setStatus('error');
-                    setTimeout(() => setStatus('idle'), 3000);
-                }
-                else
-                    setStatus('thinking'); // Thinking, Acting, etc.
-            }
-            else if (message.type === 'ECHO_SAY') {
-                showLog(message.text);
-                setStatus('speaking');
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(message.text);
-                // Find a natural sounding voice
-                const voices = window.speechSynthesis.getVoices();
-                const preferredVoices = [
-                    'Google UK English Female',
-                    'Google US English',
-                    'Samantha',
-                    'Karen',
-                    'Google UK English Male'
-                ];
-                let selectedVoice = null;
-                for (const name of preferredVoices) {
-                    selectedVoice = voices.find(v => v.name === name);
-                    if (selectedVoice)
-                        break;
-                }
-                if (!selectedVoice) {
-                    selectedVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
-                }
-                if (selectedVoice) {
-                    utterance.voice = selectedVoice;
-                }
-                utterance.rate = 1.05;
-                utterance.onend = () => {
-                    setStatus('idle');
-                    // Hands-free: reopen the mic after ECHO finishes speaking so the
-                    // user can keep the conversation going without clicking.
-                    if (handsfreeRef.current && visibleRef.current) {
-                        setTimeout(() => {
-                            iframeRef.current?.contentWindow?.postMessage({ type: 'START_RECOGNITION' }, '*');
-                        }, 400);
-                    }
-                };
-                window.speechSynthesis.speak(utterance);
-            }
-            else if (message.type === 'ECHO_SYNC_POSITION') {
-                setPosition(message.position);
-            }
-            else if (message.type === 'ECHO_OPEN_PALETTE') {
-                // Cmd/Ctrl+Shift+K — reveal the orb and focus the text input.
-                setVisible(true);
-                setChatVisible(true);
-                setTimeout(() => inputRef.current?.focus(), 120);
-            }
-        };
-        chrome.runtime.onMessage.addListener(handleMessage);
-        return () => {
-            chrome.runtime.onMessage.removeListener(handleMessage);
-        };
-    }, []);
-    const handleSubmit = (e) => {
-        if (e)
-            e.preventDefault();
-        if (!inputText.trim() || status === 'thinking' || status === 'speaking')
-            return;
-        if (status === 'listening') {
-            iframeRef.current?.contentWindow?.postMessage({ type: 'STOP_RECOGNITION' }, '*');
-        }
-        try {
-            showLog(`You: ${inputText.trim()}`);
-            chrome.runtime.sendMessage({ type: 'USER_INPUT', text: inputText });
-        }
-        catch (err) {
-            console.error(err);
-            setStatus('error');
-            setTimeout(() => setStatus('idle'), 2000);
-            return;
-        }
-        setInputText('');
-        setChatVisible(false); // Hide chat after sending
-        setStatus('thinking');
-    };
-    const handlePointerDown = (e) => {
-        isDraggingRef.current = false;
-        dragStartPosRef.current = { ...positionRef.current };
-        dragStartMouseRef.current = { x: e.clientX, y: e.clientY };
-        pressTimerRef.current = setTimeout(() => {
-            if (!isDraggingRef.current) {
-                setChatVisible(true);
-                setTimeout(() => inputRef.current?.focus(), 100);
-            }
-        }, 500);
-        window.addEventListener('pointermove', handlePointerMove);
-        window.addEventListener('pointerup', handlePointerUpWindow);
-    };
-    const handlePointerMove = (e) => {
-        const dx = e.clientX - dragStartMouseRef.current.x;
-        const dy = e.clientY - dragStartMouseRef.current.y;
-        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-            isDraggingRef.current = true;
-            if (pressTimerRef.current)
-                clearTimeout(pressTimerRef.current);
-        }
-        if (isDraggingRef.current) {
-            let newX = dragStartPosRef.current.x + dx;
-            let newY = dragStartPosRef.current.y + dy;
-            // keep within window bounds (approx)
-            newX = Math.max(0, Math.min(newX, window.innerWidth - 100));
-            newY = Math.max(0, Math.min(newY, window.innerHeight - 100));
-            setPosition({ x: newX, y: newY });
-        }
-    };
-    const handlePointerUpWindow = () => {
-        window.removeEventListener('pointermove', handlePointerMove);
-        window.removeEventListener('pointerup', handlePointerUpWindow);
-        if (pressTimerRef.current)
-            clearTimeout(pressTimerRef.current);
-        if (isDraggingRef.current) {
-            // Save and broadcast
-            const finalPos = positionRef.current;
-            chrome.storage.local.set({ echo_position: finalPos });
-            chrome.runtime.sendMessage({ type: 'ECHO_SYNC_POSITION', position: finalPos });
-            // Prevent click from firing right after drag by delaying a reset flag
-            setTimeout(() => {
-                isDraggingRef.current = false;
-            }, 50);
-        }
-    };
-    const handleClick = (e) => {
-        if (isDraggingRef.current) {
-            e.stopPropagation();
-            return;
-        }
-        if (chatVisible)
-            return;
-        if (status === 'listening') {
-            iframeRef.current?.contentWindow?.postMessage({ type: 'STOP_RECOGNITION' }, '*');
-        }
-        else if (window.speechSynthesis.speaking || status === 'thinking' || status === 'speaking' || status.startsWith('Executing')) {
-            // Abort ongoing work and speech
-            window.speechSynthesis.cancel();
-            chrome.runtime.sendMessage({ type: 'ECHO_ABORT' });
-            setStatus('idle');
-        }
-        else {
-            setInputText('');
-            iframeRef.current?.contentWindow?.postMessage({ type: 'START_RECOGNITION' }, '*');
-        }
-    };
-    if (!visible)
-        return null;
-    return ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { id: "echo-root-wrapper", "data-status": status, style: {
-            position: 'absolute',
-            left: position.x,
-            top: position.y,
-            pointerEvents: 'auto'
-        }, children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("iframe", { ref: iframeRef, src: typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL ? chrome.runtime.getURL('speech.html') : '', style: { display: 'none' }, allow: "microphone", title: "ECHO Speech Sandbox" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { id: "echo-log-box", className: logText ? 'visible' : '', children: logText }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { id: "echo-chat-box", className: chatVisible ? 'visible' : '', children: (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("form", { onSubmit: handleSubmit, style: { display: 'flex', width: '100%', gap: '8px' }, children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { id: "input", ref: inputRef, type: "text", placeholder: "Type a command\u2026", autoComplete: "off", spellCheck: "false", value: inputText, onChange: e => setInputText(e.target.value) }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { ref: submitBtnRef, id: "echo-send-btn", type: "submit", title: "Send", disabled: !inputText.trim(), children: "\u27A4" })] }) }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { id: "orb", className: "reactor", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "reactor-inner circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "tunnel circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-wrapper circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "coil-container", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-1" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-2" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-3" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-4" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-5" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-6" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-7" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-8" })] }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-outer circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-inner circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-hitbox circle abs-center", title: "Click to talk, long-press to type, drag to move", onClick: handleClick, onPointerDown: handlePointerDown, style: { width: '45%', height: '45%', zIndex: 10, cursor: 'pointer', touchAction: 'none' } })] })] }));
-}
-
-
 /***/ }
 
 /******/ 	});
@@ -32048,57 +31341,68 @@ function EchoUI() {
 let __webpack_exports__ = {};
 // This entry needs to be wrapped in an IIFE because it needs to be isolated against other modules in the chunk.
 (() => {
-/*!*******************************!*\
-  !*** ./src/content/index.tsx ***!
-  \*******************************/
+/*!*********************************!*\
+  !*** ./src/popup/sidepanel.tsx ***!
+  \*********************************/
 __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react/jsx-runtime */ "./node_modules/react/jsx-runtime.js");
-/* harmony import */ var react_dom_client__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! react-dom/client */ "./node_modules/react-dom/client.js");
-/* harmony import */ var _actions__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./actions */ "./src/content/actions.ts");
-/* harmony import */ var _ui__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./ui */ "./src/content/ui.tsx");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_1__);
+/* harmony import */ var react_dom_client__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! react-dom/client */ "./node_modules/react-dom/client.js");
+/* harmony import */ var _sidepanel_css__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./sidepanel.css */ "./src/popup/sidepanel.css");
 
 
 
 
-// 1. Setup DOM Listener for AI Actions
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    // Background forwards page actions as { type: 'DOM_ACTION', action, args }.
-    if (message.type === 'DOM_ACTION') {
-        try {
-            const result = (0,_actions__WEBPACK_IMPORTED_MODULE_2__.handleDomAction)(message.action, message.args);
-            sendResponse(result);
-        }
-        catch (e) {
-            sendResponse({ success: false, error: e.message });
-        }
-        return true; // Keep message channel open for async response
-    }
-});
-// 2. Inject React UI globally
-const initUI = () => {
-    const container = document.createElement('div');
-    container.id = 'echo-extension-root';
-    // Ensure the container itself floats above everything so it's not affected by page flow
-    container.style.position = 'fixed';
-    container.style.top = '0';
-    container.style.left = '0';
-    container.style.width = '100vw';
-    container.style.height = '100vh';
-    container.style.zIndex = '2147483647';
-    container.style.pointerEvents = 'none'; // Let clicks pass through if not on the reactor itself
-    document.body.appendChild(container);
-    const root = (0,react_dom_client__WEBPACK_IMPORTED_MODULE_1__.createRoot)(container);
-    // We wrap EchoUI in a div with pointerEvents: auto so the reactor is clickable,
-    // while the rest of the invisible container lets clicks pass through to the page.
-    root.render((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { pointerEvents: 'auto' }, children: (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(_ui__WEBPACK_IMPORTED_MODULE_3__.EchoUI, {}) }));
-};
-// Wait for DOM to be ready
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    initUI();
+function Panel() {
+    const [messages, setMessages] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)([]);
+    const [input, setInput] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)('');
+    const [status, setStatus] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)('');
+    const [usage, setUsage] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)(null);
+    const scrollRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(null);
+    const fmt = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
+    // Load persisted transcript on open, then listen for live updates.
+    (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => {
+        chrome.storage.local.get(['echo_transcript'], (r) => {
+            if (Array.isArray(r.echo_transcript))
+                setMessages(r.echo_transcript);
+        });
+        const onMessage = (m) => {
+            if (m.type === 'ECHO_SAY')
+                setMessages(prev => [...prev, { role: 'echo', text: m.text }]);
+            else if (m.type === 'ECHO_USER_ECHO')
+                setMessages(prev => [...prev, { role: 'user', text: m.text }]);
+            else if (m.type === 'ECHO_STATE')
+                setStatus(m.state === 'Idle' ? '' : m.state);
+            else if (m.type === 'ECHO_USAGE')
+                setUsage({ steps: m.steps, taskTokens: m.taskTokens, sessionTokens: m.sessionTokens });
+        };
+        chrome.runtime.onMessage.addListener(onMessage);
+        return () => chrome.runtime.onMessage.removeListener(onMessage);
+    }, []);
+    (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => {
+        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    }, [messages, status]);
+    const send = (e) => {
+        if (e)
+            e.preventDefault();
+        const text = input.trim();
+        if (!text)
+            return;
+        chrome.runtime.sendMessage({ type: 'USER_INPUT', text });
+        setInput('');
+        setStatus('Thinking...');
+        setUsage(u => (u ? { ...u, steps: 0, taskTokens: 0 } : u)); // reset task portion; keep session
+    };
+    const clearTranscript = () => {
+        chrome.storage.local.set({ echo_transcript: [] });
+        setMessages([]);
+        setStatus('');
+    };
+    return ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-panel", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("header", { className: "echo-panel-header", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { className: "echo-dot" }), " ECHO", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { className: "echo-clear", onClick: clearTranscript, title: "Clear conversation", children: "Clear" })] }), usage && ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-usage", title: "Live API usage \u2014 steps are API round-trips this task", children: ["\u26A1 ", usage.steps, " ", usage.steps === 1 ? 'step' : 'steps', " \u00B7 ", fmt(usage.taskTokens), " tokens this task", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("span", { className: "echo-usage-session", children: [" \u00B7 ", fmt(usage.sessionTokens), " session"] })] })), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-messages", ref: scrollRef, children: [messages.length === 0 && ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-empty", children: ["Ask ECHO anything, or give it a task on the current page.", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("br", {}), "e.g. \"summarize this page\" or \"search for wireless headphones\"."] })), messages.map((m, i) => ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: `echo-msg ${m.role}`, children: (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "echo-bubble", children: m.text }) }, i))), status && (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "echo-status", children: status })] }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("form", { className: "echo-input-row", onSubmit: send, children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { value: input, onChange: e => setInput(e.target.value), placeholder: "Message ECHO\u2026", autoFocus: true }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { type: "submit", disabled: !input.trim(), children: "\u27A4" })] })] }));
 }
-else {
-    window.addEventListener('DOMContentLoaded', initUI);
-}
+const root = (0,react_dom_client__WEBPACK_IMPORTED_MODULE_2__.createRoot)(document.getElementById('echo-panel-root'));
+root.render((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Panel, {}));
 
 })();
 

@@ -10,9 +10,28 @@ Built from the ground up by Deepak, ECHO leverages cutting-edge DOM manipulation
 
 * **Zero-Cost Multi-Brain Architecture:** ECHO is built to run on **5 different AI models**, allowing you to use 100% free API endpoints so you never have to worry about subscription costs or tokens.
 * **Autonomous Browser Control:** ECHO doesn't just tell you how to do things—it actually physically clicks buttons, types in search bars, and navigates web pages for you.
-* **Token-Optimized DOM Vision:** Instead of expensive image processing, ECHO extracts a highly optimized Accessibility Tree of your screen in milliseconds, understanding exactly where every button and link is located.
+* **Token-Optimized DOM Vision:** Instead of expensive image processing, ECHO reads a compact, **numbered** map of every visible button, link, and field in milliseconds, then acts on those numbers — far more reliable than pixel coordinates, which break on scroll or with fixed overlays.
 * **Long-Term Memory:** ECHO has a built-in memory bank stored locally in your browser. It automatically remembers your preferences, facts, and templates across all tabs and sessions.
 * **Floating Global Reactor:** Access ECHO via a sleek, draggable, glass-morphic "Reactor" orb that floats persistently on your screen, ready to listen at any time.
+
+---
+
+## 🆕 What ECHO Web Can Do
+
+ECHO drives your browser through a set of reliable, token-efficient tools:
+
+* **Read & understand pages:** `read_screen` (numbered elements + text), `get_page_text` (full readable content for summarizing), `extract_table` (pull a table out as JSON), `screenshot` (visual/colour questions).
+* **Act on pages:** click and type by element number, press keys (Enter, Escape, arrows…), scroll, find-and-highlight text, submit forms.
+* **Navigate:** open a URL in a new tab, navigate the current tab, go back/forward.
+* **Manage tabs:** list open tabs, switch between them, close them.
+* **Extract & save data:** download extracted CSV/JSON/text straight to your machine.
+* **Remember:** save / list / delete long-term facts and preferences.
+* **Reusable tasks (macros):** save a multi-step task by name and re-run it any time (`save_task` / `run_task` / `list_tasks`).
+* **Reminders:** schedule a desktop notification; click it to auto-run an attached task.
+* **Side Panel chat:** a persistent conversation with full transcript history (`Cmd/Ctrl + Shift + O`).
+* **Command input:** pop the on-page text box instantly with `Cmd/Ctrl + Shift + K`.
+* **Right-click menu:** highlight any text → *"Ask ECHO about…"*, or open the chat panel.
+* **Hands-free mode:** optional setting that re-opens the mic after ECHO replies for continuous back-and-forth conversation.
 
 ---
 
@@ -58,6 +77,8 @@ ECHO is designed to be completely frictionless.
 1. **Waking ECHO:** 
    - Left-click the ECHO Extension icon in your toolbar, OR
    - Press the keyboard shortcut: **Cmd + Shift + E** (Mac) or **Ctrl + Shift + E** (Windows).
+   - **Cmd/Ctrl + Shift + O** opens the persistent **Side Panel chat**.
+   - **Cmd/Ctrl + Shift + K** pops the on-page command box for quick typing.
 2. **Interacting:**
    - Click the floating **Reactor Orb** to activate the microphone.
    - Speak your command naturally.
@@ -84,6 +105,15 @@ ECHO understands natural language. Here is what you can ask it to do:
   > *(Later in a new session)* *"Fill out this contact form using my default email."*
 * **Visual Analysis:**
   > *"Take a screenshot and tell me what color the main banner is."*
+* **Data Extraction:**
+  > *"Extract the table on this page and download it as CSV."*
+* **Tab Management:**
+  > *"List my open tabs and switch to the one with my email."*
+* **Reusable Tasks (Macros):**
+  > *"Save a task called 'morning news' that opens my 3 news sites and summarizes the headlines."*
+  > *(Later)* *"Run my morning news task."*
+* **Reminders:**
+  > *"Remind me in 30 minutes to check the deploy."*
 
 ---
 

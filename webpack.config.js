@@ -9,6 +9,7 @@ module.exports = {
     background: './src/background/index.ts',
     content: './src/content/index.tsx',
     options: './src/popup/options.tsx',
+    sidepanel: './src/popup/sidepanel.tsx',
     speech: './src/content/speech.ts'
   },
   module: {
@@ -60,6 +61,7 @@ module.exports = {
       patterns: [
         { from: 'manifest.json', to: '.' },
         { from: 'src/popup/options.html', to: '.' },
+        { from: 'src/popup/sidepanel.html', to: '.' },
         { from: 'src/content/speech.html', to: '.' }
       ],
     }),
