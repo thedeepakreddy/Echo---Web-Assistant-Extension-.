@@ -1886,6 +1886,66 @@ async function runGeminiLoop(client, userInput, tabId, signal, systemPrompt) {
         safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Error' });
     }
 }
+// Extract a balanced { ... } JSON object starting at `start` in `text`.
+function extractJsonAt(text, start) {
+    let depth = 0;
+    for (let i = start; i < text.length; i++) {
+        if (text[i] === '{')
+            depth++;
+        else if (text[i] === '}') {
+            depth--;
+            if (depth === 0)
+                return text.slice(start, i + 1);
+        }
+    }
+    return null;
+}
+// Llama models on Groq/Together sometimes emit tool calls as malformed text
+// like `<function=open_url{"url":"..."}>` (or `<function=name>{...}</function>`)
+// instead of a structured tool_call. Parse those back into {name, args} so we
+// can run them anyway. Scoped to each <function=…> block to avoid bleed.
+function extractLooseToolCalls(text) {
+    const calls = [];
+    if (!text || typeof text !== 'string')
+        return calls;
+    const re = /<function=([a-zA-Z0-9_]+)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+        const name = m[1];
+        const after = m.index + m[0].length;
+        const nextTag = text.indexOf('<function=', after);
+        const closeTag = text.indexOf('</function>', after);
+        let end = text.length;
+        if (closeTag !== -1)
+            end = Math.min(end, closeTag);
+        if (nextTag !== -1)
+            end = Math.min(end, nextTag);
+        const region = text.slice(after, end);
+        const braceIdx = region.indexOf('{');
+        let args = {};
+        if (braceIdx !== -1) {
+            const jsonStr = extractJsonAt(region, braceIdx);
+            if (jsonStr) {
+                try {
+                    args = JSON.parse(jsonStr);
+                }
+                catch {
+                    args = {};
+                }
+            }
+        }
+        calls.push({ name, args });
+    }
+    return calls;
+}
+// Normalize recovered {name,args} into OpenAI tool_calls shape.
+function looseToToolCalls(loose) {
+    return loose.map((c, i) => ({
+        id: `recovered_${Date.now()}_${i}`,
+        type: 'function',
+        function: { name: c.name, arguments: JSON.stringify(c.args ?? {}) }
+    }));
+}
 // Generic OpenAI-compatible loop (used by Together AI & OpenRouter)
 async function runOpenAICompatibleLoop(endpoint, apiKey, model, userInput, tabId, signal, systemPrompt) {
     try {
@@ -1932,16 +1992,41 @@ async function runOpenAICompatibleLoop(endpoint, apiKey, model, userInput, tabId
                 }),
                 signal
             });
+            let msg;
             if (!res.ok) {
                 const errText = await res.text();
-                throw new Error(`API Error ${res.status}: ${errText}`);
+                // Groq/Llama sometimes emit a tool call as malformed text (e.g.
+                // `<function=open_url{"url":"..."}>`) instead of a structured tool_call,
+                // and Groq 400s with the raw text in `failed_generation`. Recover the
+                // intended call instead of crashing.
+                let recovered = null;
+                if (res.status === 400 && errText.includes('failed_generation')) {
+                    try {
+                        const fg = JSON.parse(errText)?.error?.failed_generation || '';
+                        const loose = extractLooseToolCalls(fg);
+                        if (loose.length)
+                            recovered = looseToToolCalls(loose);
+                    }
+                    catch { /* fall through to throw */ }
+                }
+                if (!recovered)
+                    throw new Error(`API Error ${res.status}: ${errText}`);
+                msg = { role: 'assistant', content: null, tool_calls: recovered };
             }
-            const data = await res.json();
-            accumulateUsage(tabId, data.usage?.prompt_tokens || 0, data.usage?.completion_tokens || 0);
-            const choice = data.choices?.[0];
-            const msg = choice?.message;
-            if (!msg)
-                throw new Error('Empty response from API');
+            else {
+                const data = await res.json();
+                accumulateUsage(tabId, data.usage?.prompt_tokens || 0, data.usage?.completion_tokens || 0);
+                msg = data.choices?.[0]?.message;
+                if (!msg)
+                    throw new Error('Empty response from API');
+                // Some models leak tool calls into the text content instead of using
+                // tool_calls — recover those too so the action still runs.
+                if ((!msg.tool_calls || msg.tool_calls.length === 0) && typeof msg.content === 'string') {
+                    const loose = extractLooseToolCalls(msg.content);
+                    if (loose.length)
+                        msg = { role: 'assistant', content: null, tool_calls: looseToToolCalls(loose) };
+                }
+            }
             currentOpenAIConversation.push(msg);
             // Handle text response
             if (msg.content && msg.content.trim()) {
