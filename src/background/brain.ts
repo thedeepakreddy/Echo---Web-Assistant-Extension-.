@@ -466,8 +466,49 @@ function toGeminiSchema(schema: any): any {
   return node;
 }
 
+/**
+ * Turn a raw Gemini error blob into something actionable.
+ *
+ * The important distinction is `limit: 0`, which does NOT mean "you used up
+ * your quota" — it means the key's project has no free-tier allocation at all
+ * (a Cloud-console key, an unsupported region, or billing since removed).
+ * Waiting never fixes that, so we must not tell the user to retry.
+ */
+function friendlyGeminiError(raw: string): string {
+  const hasZeroLimit = /limit:\s*0\b/.test(raw);
+  const isQuota = /RESOURCE_EXHAUSTED|429|quota/i.test(raw);
+
+  if (isQuota && hasZeroLimit) {
+    return [
+      "Your Gemini key has no free-tier quota (the API reports a limit of 0), so waiting won't help.",
+      '',
+      'This usually means the key came from a Google Cloud project rather than AI Studio, or free tier is unavailable in your region.',
+      '',
+      'Fastest fix: switch to Groq in Options — it has a real free tier and is much faster. Or create a fresh key at aistudio.google.com/apikey.',
+      '',
+      "Meanwhile I still work without any key: summarising pages, extracting emails/prices/links, filling forms, workflows, watchers and highlights.",
+    ].join('\n');
+  }
+
+  if (isQuota) {
+    const retry = raw.match(/retry in ([\d.]+)s/i)?.[1];
+    const wait = retry ? ` Try again in about ${Math.ceil(parseFloat(retry))}s.` : '';
+    return `Gemini's rate limit is hit on every model I can reach.${wait} Groq (in Options) has a more generous free tier if this keeps happening.`;
+  }
+
+  if (/API_KEY_INVALID|API key not valid|PERMISSION_DENIED|401|403/i.test(raw)) {
+    return 'That Gemini API key was rejected. Check it in Options, or get a new one at aistudio.google.com/apikey.';
+  }
+
+  // Unknown error: keep it short rather than dumping the whole JSON payload.
+  const first = raw.match(/"message":\s*"([^"]{5,200})/)?.[1] || raw.slice(0, 200);
+  return `Gemini error: ${first}`;
+}
+
 async function runGeminiLoop(client: GoogleGenAI, userInput: string, tabId: number, signal: AbortSignal, systemPrompt: string) {
   let activeTabId = tabId;
+  // Remembered so that if every model is quota-blocked we can explain why.
+  let lastQuotaError = '';
   try {
     currentGeminiConversation = pruneGemini(currentGeminiConversation);
     currentGeminiConversation.push({ role: "user", parts: [{ text: userInput }] });
@@ -516,17 +557,29 @@ async function runGeminiLoop(client: GoogleGenAI, userInput: string, tabId: numb
           succeeded = true;
         } catch (e: any) {
           const msg = String(e?.message ?? e);
-          if (msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('no longer available')) {
-            console.warn('[ECHO] Model ' + GEMINI_MODELS[modelIndex] + ' failed, trying next...');
+          const is404 = msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('no longer available');
+          const is429 = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || /quota/i.test(msg);
+
+          if (is404) {
+            console.warn('[ECHO] Model ' + GEMINI_MODELS[modelIndex] + ' unavailable, trying next...');
+            modelIndex++;
+          } else if (is429) {
+            // Gemini quota is metered per model, so another model may still be
+            // usable. Advance rather than failing the whole task.
+            console.warn('[ECHO] Model ' + GEMINI_MODELS[modelIndex] + ' quota exhausted, trying next...');
+            lastQuotaError = msg;
             modelIndex++;
           } else {
-            // Surface the real error (CORS, invalid key, quota, etc.)
-            throw new Error('Gemini API error: ' + msg);
+            throw new Error(friendlyGeminiError(msg));
           }
         }
       }
 
-      if (!succeeded || !response) throw new Error('All Gemini models are unavailable (404). Try using Claude instead.');
+      if (!succeeded || !response) {
+        throw new Error(lastQuotaError
+          ? friendlyGeminiError(lastQuotaError)
+          : 'None of the Gemini models responded. Your key may be invalid, or the models are unavailable in your region — try Groq in Options instead.');
+      }
 
       accumulateUsage(activeTabId, response.usageMetadata?.promptTokenCount || 0, response.usageMetadata?.candidatesTokenCount || 0);
 
@@ -579,7 +632,11 @@ async function runGeminiLoop(client: GoogleGenAI, userInput: string, tabId: numb
       safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
       return;
     }
-    safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: 'Gemini Error: ' + err.message });
+    // friendlyGeminiError already produced a readable message — don't bury it
+    // under another "Gemini Error:" prefix.
+    const msg = String(err.message || err);
+    const alreadyFriendly = /^(Your Gemini key|Gemini's rate limit|That Gemini API key|Gemini error:|None of the Gemini)/.test(msg);
+    safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: alreadyFriendly ? msg : friendlyGeminiError(msg) });
     safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Error' });
   }
 }
