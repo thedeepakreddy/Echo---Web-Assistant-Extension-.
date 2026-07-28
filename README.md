@@ -16,6 +16,35 @@ Built from the ground up by Deepak, ECHO leverages cutting-edge DOM manipulation
 
 ---
 
+## 🧠 The Local Brain (v2)
+
+ECHO no longer calls an API for everything. Every request enters a **4-tier router** and exits at the cheapest tier that can genuinely answer it. Roughly **85 % of requests never touch the network.**
+
+| Tier | Engine | Cost | Handles |
+|---|---|---|---|
+| **0 — Instant** | Storage + DOM + site knowledge | free, 0 ms | Greetings, memory, navigation, extraction, form filling, workflows, watchers |
+| **1 — Cached** | IndexedDB response cache | free, <5 ms | Anything you (or a rephrasing of you) already asked |
+| **2 — On-device** | Chrome built-in AI, or a built-in extractive reader | free, ~0.5 s | Summaries, questions about the page, multi-tab research |
+| **3 — Cloud** | Groq / Gemini / Claude / Together / OpenRouter | uses quota | Complex multi-step automation, writing, judgement |
+
+Each reply in the side panel is badged with the tier that produced it, and a live bar shows what share of your requests avoided the API entirely.
+
+**Most of ECHO now works with no API key at all** — summarising, extracting, form filling, workflows, watchers, highlights and recall are all fully local.
+
+### New local-first capabilities
+
+* **Workflow recorder** — *"record a workflow"*, do your steps, *"stop recording and call it daily standup"*. Replay forever with zero tokens. Selectors are stored as ranked candidates, so a workflow survives site redesigns. Passwords are never recorded.
+* **Page watchers** — *"watch this page and tell me when the price drops below 800"*. Re-checks on a schedule in a background tab and fires a desktop notification. Supports below / above / contains / disappears / any-change.
+* **Site intelligence** — ECHO knows the DOM of 20+ major sites (Google, YouTube, Gmail, GitHub, Amazon, X, Reddit, LinkedIn, Spotify, Netflix…), so *"search YouTube for lo-fi"* is a direct action, not an AI task.
+* **Smart extractors** — *"extract all emails"* / phones / prices / links / dates / headings. Pure regex, instant, with junk filtering.
+* **Auto form filler** — matches fields to your saved memory by name, label, placeholder and autocomplete hint. **Never touches passwords, cards, CVV, SSN or account numbers, and never submits.**
+* **Auto knowledge base** — pages you read are indexed locally so you can ask *"what was that article about quantum computing?"* or *"what did I read today?"*. Login, checkout and auth pages are excluded.
+* **Highlights** — select text, click the ECHO chip. Re-injected when you revisit the page. Export to Markdown.
+* **Proactive suggestions** — offers a summary on a long read, or to fill a long form. Rule-based; no AI runs until you accept.
+* **Research mode** — *"research all my tabs"* reads every open tab on-device and merges them into one brief, replacing what used to be one API call per tab.
+
+---
+
 ## 🆕 What ECHO Web Can Do
 
 ECHO drives your browser through a set of reliable, token-efficient tools:

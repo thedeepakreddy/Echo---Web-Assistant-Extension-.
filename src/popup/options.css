@@ -47,3 +47,47 @@ button:hover {
   font-size: 12px;
   color: #888;
 }
+
+/* Local Brain settings section */
+.section-title {
+  font-size: 13px;
+  color: #4a90e2;
+  margin: 0 0 8px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.router-report {
+  background: #0a1410;
+  border-left: 3px solid #22c55e;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #86efac;
+}
+.echo-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 12px;
+}
+.echo-toggle input[type="checkbox"] {
+  width: auto;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: #4a90e2;
+  cursor: pointer;
+}
+.echo-toggle label {
+  display: block;
+  margin: 0 0 2px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.echo-toggle small {
+  display: block;
+  color: #7a8394;
+  font-size: 11px;
+  line-height: 1.45;
+}

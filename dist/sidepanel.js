@@ -79,6 +79,35 @@ body {
   width: 44px; font-size: 16px; cursor: pointer;
 }
 .echo-input-row button:disabled { opacity: 0.4; cursor: default; }
+
+/* Local-vs-cloud routing summary — the headline number is how much
+   work ECHO did without spending quota. */
+.echo-router {
+  padding: 7px 14px;
+  border-bottom: 1px solid #1e2230;
+  background: #0a1410;
+  border-left: 3px solid #22c55e;
+}
+.echo-router-main { font-size: 11.5px; color: #86efac; font-weight: 600; letter-spacing: 0.2px; }
+.echo-router-sub { font-size: 10px; color: #4b5563; margin-top: 2px; }
+
+/* Per-message badge naming the tier that answered. */
+.echo-tier {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+.echo-tier.t0 { background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.4); }
+.echo-tier.t1 { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.4); }
+.echo-tier.t2 { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); }
+.echo-tier.t3 { background: rgba(239,68,68,0.13);  color: #f87171; border: 1px solid rgba(239,68,68,0.35); }
 `, ""]);
 // Exports
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (___CSS_LOADER_EXPORT___);
@@ -31354,28 +31383,48 @@ __webpack_require__.r(__webpack_exports__);
 
 
 
+// Which brain answered. Tier 3 is the only one that spends API quota.
+const TIERS = {
+    0: { label: 'instant', title: 'Answered locally — no AI, no API', cls: 't0' },
+    1: { label: 'cached', title: 'Replayed from a stored answer — no API', cls: 't1' },
+    2: { label: 'on-device', title: 'Answered by the on-device model — no API', cls: 't2' },
+    3: { label: 'cloud', title: 'Answered by the cloud API — used quota', cls: 't3' },
+};
 function Panel() {
     const [messages, setMessages] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)([]);
     const [input, setInput] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)('');
     const [status, setStatus] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)('');
     const [usage, setUsage] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)(null);
+    const [report, setReport] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)('');
     const scrollRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(null);
     const fmt = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
+    const refreshReport = () => {
+        chrome.runtime.sendMessage({ type: 'ECHO_ROUTER_REPORT' })
+            .then((r) => { if (r?.text)
+            setReport(r.text); })
+            .catch(() => { });
+    };
     // Load persisted transcript on open, then listen for live updates.
     (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => {
         chrome.storage.local.get(['echo_transcript'], (r) => {
             if (Array.isArray(r.echo_transcript))
                 setMessages(r.echo_transcript);
         });
+        refreshReport();
         const onMessage = (m) => {
-            if (m.type === 'ECHO_SAY')
-                setMessages(prev => [...prev, { role: 'echo', text: m.text }]);
-            else if (m.type === 'ECHO_USER_ECHO')
+            if (m.type === 'ECHO_SAY') {
+                setMessages(prev => [...prev, { role: 'echo', text: m.text, tier: m.tier }]);
+                refreshReport();
+            }
+            else if (m.type === 'ECHO_USER_ECHO') {
                 setMessages(prev => [...prev, { role: 'user', text: m.text }]);
-            else if (m.type === 'ECHO_STATE')
+            }
+            else if (m.type === 'ECHO_STATE') {
                 setStatus(m.state === 'Idle' ? '' : m.state);
-            else if (m.type === 'ECHO_USAGE')
+            }
+            else if (m.type === 'ECHO_USAGE') {
                 setUsage({ steps: m.steps, taskTokens: m.taskTokens, sessionTokens: m.sessionTokens });
+            }
         };
         chrome.runtime.onMessage.addListener(onMessage);
         return () => chrome.runtime.onMessage.removeListener(onMessage);
@@ -31399,7 +31448,11 @@ function Panel() {
         setMessages([]);
         setStatus('');
     };
-    return ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-panel", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("header", { className: "echo-panel-header", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { className: "echo-dot" }), " ECHO", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { className: "echo-clear", onClick: clearTranscript, title: "Clear conversation", children: "Clear" })] }), usage && ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-usage", title: "Live API usage \u2014 steps are API round-trips this task", children: ["\u26A1 ", usage.steps, " ", usage.steps === 1 ? 'step' : 'steps', " \u00B7 ", fmt(usage.taskTokens), " tokens this task", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("span", { className: "echo-usage-session", children: [" \u00B7 ", fmt(usage.sessionTokens), " session"] })] })), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-messages", ref: scrollRef, children: [messages.length === 0 && ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-empty", children: ["Ask ECHO anything, or give it a task on the current page.", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("br", {}), "e.g. \"summarize this page\" or \"search for wireless headphones\"."] })), messages.map((m, i) => ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: `echo-msg ${m.role}`, children: (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "echo-bubble", children: m.text }) }, i))), status && (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "echo-status", children: status })] }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("form", { className: "echo-input-row", onSubmit: send, children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { value: input, onChange: e => setInput(e.target.value), placeholder: "Message ECHO\u2026", autoFocus: true }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { type: "submit", disabled: !input.trim(), children: "\u27A4" })] })] }));
+    const reportLines = report ? report.split('\n') : [];
+    return ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-panel", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("header", { className: "echo-panel-header", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { className: "echo-dot" }), " ECHO", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { className: "echo-clear", onClick: clearTranscript, title: "Clear conversation", children: "Clear" })] }), reportLines.length > 0 && ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-router", title: "How many requests were answered without spending API quota", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-router-main", children: ["\uD83E\uDDE0 ", reportLines[0]] }), reportLines[1] && (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "echo-router-sub", children: reportLines[1] })] })), usage && ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-usage", title: "Cloud API usage \u2014 steps are API round-trips this task", children: ["\u26A1 ", usage.steps, " ", usage.steps === 1 ? 'step' : 'steps', " \u00B7 ", fmt(usage.taskTokens), " tokens this task", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("span", { className: "echo-usage-session", children: [" \u00B7 ", fmt(usage.sessionTokens), " session"] })] })), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-messages", ref: scrollRef, children: [messages.length === 0 && ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-empty", children: ["Ask ECHO anything, or give it a task on the current page.", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("br", {}), "Try ", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("b", { children: "\"summarize this page\"" }), ", ", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("b", { children: "\"extract emails\"" }), ",", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("br", {}), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("b", { children: "\"record a workflow\"" }), " or ", (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("b", { children: "\"watch this page\"" }), "."] })), messages.map((m, i) => {
+                        const tier = m.role === 'echo' && m.tier !== undefined ? TIERS[m.tier] : null;
+                        return ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: `echo-msg ${m.role}`, children: (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "echo-bubble", children: [m.text, tier && (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { className: `echo-tier ${tier.cls}`, title: tier.title, children: tier.label })] }) }, i));
+                    }), status && (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "echo-status", children: status })] }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("form", { className: "echo-input-row", onSubmit: send, children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { value: input, onChange: e => setInput(e.target.value), placeholder: "Message ECHO\u2026", autoFocus: true }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { type: "submit", disabled: !input.trim(), children: "\u27A4" })] })] }));
 }
 const root = (0,react_dom_client__WEBPACK_IMPORTED_MODULE_2__.createRoot)(document.getElementById('echo-panel-root'));
 root.render((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Panel, {}));

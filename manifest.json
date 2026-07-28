@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "ECHO Online",
-  "version": "1.0.0",
-  "description": "ECHO Browser Assistant",
+  "version": "2.0.0",
+  "description": "ECHO — autonomous browser assistant with a local-first brain. Most work happens on-device, so your API quota lasts.",
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
+    "unlimitedStorage",
     "tabs",
     "commands",
     "downloads",

@@ -14,6 +14,7 @@ export function EchoUI() {
   const [inputText, setInputText] = useState('');
   const [chatVisible, setChatVisible] = useState(false);
   const [logText, setLogText] = useState('');
+  const [suggestion, setSuggestion] = useState<{ text: string; action: string } | null>(null);
   const [position, setPosition] = useState({ x: window.innerWidth - 150, y: window.innerHeight - 150 });
   const positionRef = useRef(position);
   useEffect(() => { positionRef.current = position; }, [position]);
@@ -45,6 +46,37 @@ export function EchoUI() {
     logTimerRef.current = setTimeout(() => {
       setLogText('');
     }, 4000);
+  };
+
+  // The passive observer posts suggestions on the page's own window. Any script
+  // on the page can forge such a message, so the action is never taken from the
+  // message — only a fixed allowlist index is honoured. A hostile page can at
+  // worst offer one of ECHO's own harmless local commands.
+  useEffect(() => {
+    const ALLOWED: Record<string, string> = {
+      'fill form': 'fill this form',
+      'summarize this page': 'summarize this page',
+    };
+    const onLocalSuggest = (event: MessageEvent) => {
+      if (event.source !== window) return;
+      const d = event.data;
+      if (d?.source !== 'echo-observer' || d?.type !== 'ECHO_LOCAL_SUGGEST') return;
+      const action = ALLOWED[String(d.action || '')];
+      if (!action || !d.text) return;
+      setSuggestion({ text: String(d.text).slice(0, 160), action });
+      window.setTimeout(() => setSuggestion(null), 18000);
+    };
+    window.addEventListener('message', onLocalSuggest);
+    return () => window.removeEventListener('message', onLocalSuggest);
+  }, []);
+
+  const acceptSuggestion = () => {
+    if (!suggestion) return;
+    setVisible(true);
+    chrome.runtime.sendMessage({ type: 'USER_INPUT', text: suggestion.action });
+    showLog(`You: ${suggestion.action}`);
+    setStatus('thinking');
+    setSuggestion(null);
   };
 
   // Listen to iframe sandbox for speech events
@@ -260,12 +292,24 @@ export function EchoUI() {
     }
   };
 
-  if (!visible) return null;
+  // The proactive toast is independent of the orb — it can appear while ECHO
+  // is asleep, which is exactly when a passive suggestion is most useful.
+  const suggestionToast = suggestion ? (
+    <div id="echo-suggest-toast">
+      <span className="echo-suggest-text">{suggestion.text}</span>
+      <button className="echo-suggest-yes" onClick={acceptSuggestion}>Yes</button>
+      <button className="echo-suggest-no" onClick={() => setSuggestion(null)} aria-label="Dismiss">✕</button>
+    </div>
+  ) : null;
+
+  if (!visible) return suggestionToast;
 
   return (
-    <div 
-      id="echo-root-wrapper" 
-      data-status={status} 
+    <>
+    {suggestionToast}
+    <div
+      id="echo-root-wrapper"
+      data-status={status}
       style={{
         position: 'absolute',
         left: position.x,
@@ -332,5 +376,6 @@ export function EchoUI() {
         ></div>
       </div>
     </div>
+    </>
   );
 }

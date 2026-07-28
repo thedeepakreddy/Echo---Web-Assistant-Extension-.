@@ -302,6 +302,58 @@ ___CSS_LOADER_EXPORT___.push([module.id, `/*
   0% { opacity: 1; }
   100% { opacity: 0.35; }
 }
+
+/* Proactive suggestion toast (Tier 2 passive observer).
+   Fixed to the viewport and independent of the orb, so it can appear even
+   while ECHO is asleep. */
+#echo-suggest-toast {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 40px));
+  padding: 11px 12px 11px 16px;
+  background: rgba(19, 22, 32, 0.97);
+  border: 1px solid #2f3646;
+  border-left: 3px solid #4a90e2;
+  border-radius: 12px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+  font: 400 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #e8eaed;
+  pointer-events: auto;
+  z-index: 2147483646;
+  animation: echo-toast-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes echo-toast-in {
+  from { opacity: 0; transform: translate(-50%, 14px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+#echo-suggest-toast .echo-suggest-text { flex: 1; }
+#echo-suggest-toast button {
+  flex-shrink: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  font: 600 12px -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: filter 0.15s, color 0.15s;
+}
+#echo-suggest-toast .echo-suggest-yes {
+  background: #4a90e2;
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+}
+#echo-suggest-toast .echo-suggest-yes:hover { filter: brightness(1.15); }
+#echo-suggest-toast .echo-suggest-no {
+  background: transparent;
+  color: #79839a;
+  border: 1px solid #333b4d;
+  padding: 6px 9px;
+  line-height: 1;
+}
+#echo-suggest-toast .echo-suggest-no:hover { color: #e8eaed; }
 `, ""]);
 // Exports
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (___CSS_LOADER_EXPORT___);
@@ -31465,6 +31517,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   handleDomAction: () => (/* binding */ handleDomAction)
 /* harmony export */ });
+/* harmony import */ var _extractors__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./extractors */ "./src/content/extractors.ts");
+/* harmony import */ var _form_filler__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./form-filler */ "./src/content/form-filler.ts");
+/* harmony import */ var _recorder__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./recorder */ "./src/content/recorder.ts");
+/* harmony import */ var _highlighter__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./highlighter */ "./src/content/highlighter.ts");
 // ECHO content-script DOM engine.
 //
 // The agent "sees" the page through read_screen, which numbers every visible
@@ -31472,6 +31528,10 @@ __webpack_require__.r(__webpack_exports__);
 // (click_element, type_text) address those numbers instead of raw x/y
 // coordinates — this is far more reliable than document.elementFromPoint,
 // which breaks with fixed headers, overlays, and any scrolling.
+
+
+
+
 let echoElements = [];
 const INTERACTIVE_SELECTOR = [
     'a[href]', 'button', 'input', 'textarea', 'select',
@@ -31663,10 +31723,983 @@ function handleDomAction(action, args) {
             const rows = Array.from(table.querySelectorAll('tr')).slice(0, 200).map(tr => Array.from(tr.querySelectorAll('th,td')).map(td => td.innerText.replace(/\s+/g, ' ').trim()));
             return { success: true, result: JSON.stringify({ tableIndex: wanted, totalTables: tables.length, rows }) };
         }
+        // --- local (Tier 0/1) actions — no model involved ---------------------
+        case 'extract_pattern': {
+            const result = (0,_extractors__WEBPACK_IMPORTED_MODULE_0__.extractPattern)(String(args.kind || 'emails'));
+            return { success: true, result };
+        }
+        case 'fill_form': {
+            const report = (0,_form_filler__WEBPACK_IMPORTED_MODULE_1__.fillForm)((args.memory || {}));
+            return { success: true, result: report };
+        }
+        case 'click_selector': {
+            // Try each candidate selector until one resolves to a visible element.
+            const selectors = Array.isArray(args.selectors) ? args.selectors : [String(args.selector || '')];
+            for (const sel of selectors) {
+                if (!sel)
+                    continue;
+                try {
+                    const el = Array.from(document.querySelectorAll(sel)).find(isVisible);
+                    if (!el)
+                        continue;
+                    try {
+                        el.scrollIntoView({ block: 'center' });
+                    }
+                    catch { /* ignore */ }
+                    el.click();
+                    return { success: true, result: { clicked: true, selector: sel } };
+                }
+                catch { /* invalid selector — try the next */ }
+            }
+            return { success: true, result: { clicked: false } };
+        }
+        case 'read_value': {
+            // Used by page watchers: read one element, or the whole page as fallback.
+            const sel = args.selector ? String(args.selector) : '';
+            let value = '';
+            if (sel) {
+                try {
+                    const el = document.querySelector(sel);
+                    value = el ? (el.innerText || el.value || '') : '';
+                }
+                catch {
+                    value = '';
+                }
+            }
+            if (!value)
+                value = (document.body?.innerText || '').substring(0, 3000);
+            return { success: true, result: { value: value.replace(/\s+/g, ' ').trim() } };
+        }
+        case 'record_start':
+            return (0,_recorder__WEBPACK_IMPORTED_MODULE_2__.startRecording)();
+        case 'record_stop':
+            return (0,_recorder__WEBPACK_IMPORTED_MODULE_2__.stopRecording)();
+        case 'play_step':
+            return (0,_recorder__WEBPACK_IMPORTED_MODULE_2__.playStep)(args);
+        case 'render_highlights': {
+            const painted = (0,_highlighter__WEBPACK_IMPORTED_MODULE_3__.renderHighlights)((args.texts || []));
+            return { success: true, result: { painted } };
+        }
+        case 'clear_highlights': {
+            ;(0,_highlighter__WEBPACK_IMPORTED_MODULE_3__.clearRenderedHighlights)();
+            return { success: true, result: 'cleared' };
+        }
         default:
             throw new Error(`Unknown DOM action: ${action}`);
     }
 }
+
+
+/***/ },
+
+/***/ "./src/content/extractors.ts"
+/*!***********************************!*\
+  !*** ./src/content/extractors.ts ***!
+  \***********************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   extractAll: () => (/* binding */ extractAll),
+/* harmony export */   extractPattern: () => (/* binding */ extractPattern),
+/* harmony export */   toCSV: () => (/* binding */ toCSV)
+/* harmony export */ });
+// Tier 0 — pattern extractors. Pure regex over the rendered page, no AI.
+const PATTERNS = {
+    emails: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+    phones: /(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{3,4}[\s.-]?\d{3,4}(?:[\s.-]?\d{2,4})?/g,
+    prices: /(?:[$£€¥₹]\s?\d[\d,]*(?:\.\d{1,2})?)|(?:\d[\d,]*(?:\.\d{1,2})?\s?(?:USD|EUR|GBP|INR|JPY))/gi,
+    dates: /\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})\b/gi,
+    handles: /(?:^|\s)@[A-Za-z0-9_]{2,30}\b/g,
+};
+function pageText() {
+    return document.body?.innerText || '';
+}
+function uniq(list) {
+    const seen = new Set();
+    const out = [];
+    for (const item of list) {
+        const k = item.toLowerCase();
+        if (!seen.has(k)) {
+            seen.add(k);
+            out.push(item);
+        }
+    }
+    return out;
+}
+/** Reject digit runs that are clearly not phone numbers. */
+function plausiblePhone(s) {
+    const digits = s.replace(/\D/g, '');
+    if (digits.length < 7 || digits.length > 15)
+        return false;
+    if (/^0+$/.test(digits))
+        return false;
+    // Long undelimited runs are usually IDs, not numbers people dial.
+    if (!/[\s.\-()+]/.test(s.trim()) && digits.length > 11)
+        return false;
+    return true;
+}
+function extractPattern(kind) {
+    let items = [];
+    if (kind === 'links') {
+        const anchors = Array.from(document.querySelectorAll('a[href]'));
+        items = uniq(anchors
+            .map(a => a.href)
+            .filter(h => /^https?:/i.test(h)));
+    }
+    else if (kind === 'images') {
+        const imgs = Array.from(document.querySelectorAll('img[src]'));
+        items = uniq(imgs.map(i => i.src).filter(s => /^https?:/i.test(s)));
+    }
+    else if (kind === 'headings') {
+        const hs = Array.from(document.querySelectorAll('h1,h2,h3'));
+        items = uniq(hs
+            .map(h => `${h.tagName}: ${h.innerText.replace(/\s+/g, ' ').trim()}`)
+            .filter(t => t.length > 5));
+    }
+    else {
+        const re = PATTERNS[kind];
+        if (!re)
+            return { kind, count: 0, items: [] };
+        const matches = pageText().match(re) || [];
+        items = uniq(matches.map(m => m.trim()));
+        if (kind === 'phones')
+            items = items.filter(plausiblePhone);
+        if (kind === 'handles')
+            items = items.map(h => h.trim());
+    }
+    // Cap so a huge page can't blow up the tool result.
+    const capped = items.slice(0, 200);
+    return { kind, count: items.length, items: capped };
+}
+/** Everything at once — used by the "extract everything" phrasing. */
+function extractAll() {
+    const out = {};
+    for (const k of ['emails', 'phones', 'prices', 'dates']) {
+        const r = extractPattern(k);
+        if (r.items.length)
+            out[k] = r.items.slice(0, 50);
+    }
+    return out;
+}
+function toCSV(kind, items) {
+    const esc = (s) => `"${s.replace(/"/g, '""')}"`;
+    return `${esc(kind)}\n${items.map(esc).join('\n')}\n`;
+}
+
+
+/***/ },
+
+/***/ "./src/content/form-filler.ts"
+/*!************************************!*\
+  !*** ./src/content/form-filler.ts ***!
+  \************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   countFillableFields: () => (/* binding */ countFillableFields),
+/* harmony export */   fillForm: () => (/* binding */ fillForm)
+/* harmony export */ });
+// Tier 0 — automatic form filler.
+//
+// Scores every visible field against your saved memory keys using the field's
+// name, id, placeholder, aria-label, autocomplete hint and its rendered
+// <label>. No AI: the page tells us what it wants if we read it carefully.
+const MATCHERS = [
+    { keys: ['email', 'user_email', 'default_email', 'work_email'], words: ['email', 'e-mail'], auto: ['email'], type: 'email' },
+    { keys: ['first_name', 'firstname', 'given_name'], words: ['first name', 'firstname', 'given name', 'fname'], auto: ['given-name'] },
+    { keys: ['last_name', 'lastname', 'surname', 'family_name'], words: ['last name', 'lastname', 'surname', 'family name', 'lname'], auto: ['family-name'] },
+    { keys: ['user_name', 'name', 'full_name', 'fullname'], words: ['full name', 'your name', 'name'], auto: ['name'] },
+    { keys: ['phone', 'mobile', 'phone_number', 'telephone'], words: ['phone', 'mobile', 'tel', 'contact number'], auto: ['tel'], type: 'tel' },
+    { keys: ['company', 'organization', 'employer'], words: ['company', 'organization', 'organisation', 'employer', 'business'], auto: ['organization'] },
+    { keys: ['job_title', 'title', 'role', 'position'], words: ['job title', 'position', 'role', 'occupation'], auto: ['organization-title'] },
+    { keys: ['address', 'address_line1', 'street'], words: ['address', 'street', 'address line 1'], auto: ['street-address', 'address-line1'] },
+    { keys: ['address_line2', 'apartment'], words: ['address line 2', 'apartment', 'suite', 'unit'], auto: ['address-line2'] },
+    { keys: ['city', 'town'], words: ['city', 'town', 'locality'], auto: ['address-level2'] },
+    { keys: ['state', 'province', 'region'], words: ['state', 'province', 'region'], auto: ['address-level1'] },
+    { keys: ['zip', 'zipcode', 'postal_code', 'postcode'], words: ['zip', 'postal', 'postcode', 'pin code'], auto: ['postal-code'] },
+    { keys: ['country'], words: ['country'], auto: ['country', 'country-name'] },
+    { keys: ['website', 'url', 'portfolio'], words: ['website', 'url', 'homepage', 'portfolio'], auto: ['url'], type: 'url' },
+    { keys: ['github', 'github_url'], words: ['github'] },
+    { keys: ['linkedin', 'linkedin_url'], words: ['linkedin'] },
+    { keys: ['twitter', 'x_handle'], words: ['twitter', 'x handle'] },
+    { keys: ['birthday', 'dob', 'date_of_birth'], words: ['birth', 'dob', 'birthday'], auto: ['bday'] },
+    { keys: ['bio', 'about', 'summary'], words: ['bio', 'about you', 'summary', 'description', 'tell us'] },
+];
+/** Fields we must never touch, whatever they look like. */
+const FORBIDDEN = /pass(word|wd)|cvv|cvc|card|credit|ssn|social.?security|pin\b|secret|token|otp|security.?code|routing|account.?number/i;
+function isVisible(el) {
+    const s = getComputedStyle(el);
+    if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) === 0)
+        return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+}
+/** Every textual hint the page gives us about a field. */
+function describeField(el) {
+    const parts = [];
+    const push = (v) => { if (v)
+        parts.push(v); };
+    push(el.getAttribute('name'));
+    push(el.getAttribute('id'));
+    push(el.getAttribute('placeholder'));
+    push(el.getAttribute('aria-label'));
+    push(el.getAttribute('title'));
+    push(el.getAttribute('autocomplete'));
+    const id = el.getAttribute('id');
+    if (id) {
+        const lbl = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+        push(lbl?.innerText || null);
+    }
+    const wrapping = el.closest('label');
+    if (wrapping)
+        push(wrapping.innerText);
+    // Some designs put the label in a sibling above the input.
+    const prev = el.previousElementSibling;
+    if (prev && /label|span|div|p/i.test(prev.tagName) && prev.innerText.length < 60)
+        push(prev.innerText);
+    return parts.join(' ').toLowerCase().replace(/\s+/g, ' ');
+}
+function setNativeValue(el, value) {
+    const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    if (setter)
+        setter.call(el, value);
+    else
+        el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+/**
+ * Fill every field we can confidently match from `memory`.
+ * Returns a report so ECHO can tell the user exactly what it did.
+ */
+function fillForm(memory) {
+    const report = { filled: [], skipped: [], total: 0 };
+    if (!memory || !Object.keys(memory).length)
+        return report;
+    // Case-insensitive memory lookup.
+    const mem = new Map();
+    for (const [k, v] of Object.entries(memory)) {
+        if (typeof v === 'string' && v.trim())
+            mem.set(k.toLowerCase().replace(/[\s-]/g, '_'), v);
+    }
+    const fields = Array.from(document.querySelectorAll('input, textarea, select')).filter(el => {
+        if (!isVisible(el))
+            return false;
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (['hidden', 'submit', 'button', 'reset', 'file', 'image', 'range', 'color'].includes(type))
+            return false;
+        if (el.hasAttribute('readonly') || el.hasAttribute('disabled'))
+            return false;
+        return true;
+    });
+    report.total = fields.length;
+    for (const el of fields) {
+        const desc = describeField(el);
+        if (!desc)
+            continue;
+        // Hard stop on anything sensitive, and on password inputs by type.
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (type === 'password' || FORBIDDEN.test(desc)) {
+            report.skipped.push(desc.slice(0, 40));
+            continue;
+        }
+        // Don't clobber what the user already typed.
+        const current = el.value;
+        if (current && current.trim())
+            continue;
+        const match = bestMatch(desc, type, mem);
+        if (!match)
+            continue;
+        try {
+            if (el.tagName === 'SELECT') {
+                const sel = el;
+                const want = match.value.toLowerCase();
+                const opt = Array.from(sel.options).find(o => o.value.toLowerCase() === want || o.text.toLowerCase().trim() === want) || Array.from(sel.options).find(o => o.text.toLowerCase().includes(want));
+                if (!opt)
+                    continue;
+                sel.value = opt.value;
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            else {
+                setNativeValue(el, match.value);
+            }
+            report.filled.push({ field: shortLabel(desc), key: match.key });
+        }
+        catch { /* skip fields that fight back */ }
+    }
+    return report;
+}
+function bestMatch(desc, type, mem) {
+    let best = null;
+    for (const m of MATCHERS) {
+        let score = 0;
+        if (m.auto?.some(a => desc.includes(a)))
+            score += 5;
+        if (m.type && type === m.type)
+            score += 3;
+        for (const w of m.words) {
+            if (desc.includes(w))
+                score += w.includes(' ') ? 4 : 2; // multi-word hints are stronger
+        }
+        if (score === 0)
+            continue;
+        for (const key of m.keys) {
+            const val = mem.get(key);
+            if (val) {
+                if (!best || score > best.score)
+                    best = { key, value: val, score };
+                break; // first key in preference order wins
+            }
+        }
+    }
+    // Direct hit: the field name literally matches a memory key.
+    if (!best) {
+        for (const [key, value] of mem) {
+            const plain = key.replace(/_/g, ' ');
+            if (plain.length > 3 && desc.includes(plain)) {
+                best = { key, value, score: 3 };
+                break;
+            }
+        }
+    }
+    return best && best.score >= 2 ? { key: best.key, value: best.value } : null;
+}
+function shortLabel(desc) {
+    return desc.split(' ').slice(0, 4).join(' ').slice(0, 40);
+}
+/** Count fillable fields — lets the passive observer offer help. */
+function countFillableFields() {
+    return Array.from(document.querySelectorAll('input, textarea, select')).filter(el => {
+        if (!isVisible(el))
+            return false;
+        const t = (el.getAttribute('type') || '').toLowerCase();
+        if (['hidden', 'submit', 'button', 'reset', 'file', 'image'].includes(t))
+            return false;
+        if (t === 'password')
+            return false;
+        return !el.value;
+    }).length;
+}
+
+
+/***/ },
+
+/***/ "./src/content/highlighter.ts"
+/*!************************************!*\
+  !*** ./src/content/highlighter.ts ***!
+  \************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   clearRenderedHighlights: () => (/* binding */ clearRenderedHighlights),
+/* harmony export */   initHighlighter: () => (/* binding */ initHighlighter),
+/* harmony export */   renderHighlights: () => (/* binding */ renderHighlights)
+/* harmony export */ });
+// Tier 1 — in-page highlighting.
+//
+// Selecting text pops a small ECHO chip; clicking it stores the selection in
+// IndexedDB via the background. On a later visit the saved passages are found
+// again by text and re-wrapped, so your marks come back without any server.
+let chip = null;
+let chipTimer = null;
+let injected = false;
+const MARK_CLASS = 'echo-hl-mark';
+function removeChip() {
+    chip?.remove();
+    chip = null;
+    if (chipTimer) {
+        window.clearTimeout(chipTimer);
+        chipTimer = null;
+    }
+}
+function showChip(x, y, text) {
+    removeChip();
+    chip = document.createElement('div');
+    chip.className = 'echo-hl-chip';
+    chip.textContent = '🖍 Save to ECHO';
+    Object.assign(chip.style, {
+        position: 'absolute',
+        left: `${Math.max(8, x - 60)}px`,
+        top: `${Math.max(8, y - 42)}px`,
+        background: '#1e2230',
+        color: '#e8eaed',
+        border: '1px solid #4a90e2',
+        borderRadius: '8px',
+        padding: '6px 11px',
+        font: '600 12px -apple-system,BlinkMacSystemFont,sans-serif',
+        cursor: 'pointer',
+        zIndex: '2147483646',
+        boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
+        userSelect: 'none',
+        whiteSpace: 'nowrap',
+    });
+    chip.addEventListener('mousedown', (e) => {
+        // mousedown, not click — click would clear the selection first.
+        e.preventDefault();
+        e.stopPropagation();
+        chrome.runtime.sendMessage({
+            type: 'ECHO_SAVE_HIGHLIGHT',
+            text,
+            url: location.href,
+            title: document.title,
+        }).catch(() => { });
+        paintSelection();
+        removeChip();
+        window.getSelection()?.removeAllRanges();
+    });
+    document.body.appendChild(chip);
+    // Don't leave the chip hanging around if the user ignores it.
+    chipTimer = window.setTimeout(removeChip, 6000);
+}
+function onSelectionEnd(e) {
+    if (e.target?.closest?.('#echo-extension-root, .echo-hl-chip'))
+        return;
+    window.setTimeout(() => {
+        const sel = window.getSelection();
+        const text = sel?.toString().trim() || '';
+        if (text.length < 12 || text.length > 1200) {
+            removeChip();
+            return;
+        }
+        const range = sel.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        if (!rect.width && !rect.height) {
+            removeChip();
+            return;
+        }
+        showChip(rect.left + window.scrollX + rect.width / 2, rect.top + window.scrollY, text);
+    }, 10);
+}
+/** Wrap the current selection in a mark so the user sees it took. */
+function paintSelection() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0)
+        return;
+    const range = sel.getRangeAt(0);
+    try {
+        const mark = document.createElement('mark');
+        mark.className = MARK_CLASS;
+        mark.style.background = 'rgba(74,144,226,0.30)';
+        mark.style.color = 'inherit';
+        mark.style.borderRadius = '2px';
+        range.surroundContents(mark);
+    }
+    catch {
+        // surroundContents throws when the range crosses element boundaries;
+        // the highlight is still saved, we just can't paint it this time.
+    }
+}
+/** Re-apply stored highlights by locating their text in the document. */
+function renderHighlights(texts) {
+    if (!texts?.length)
+        return 0;
+    let painted = 0;
+    for (const target of texts) {
+        const needle = target.replace(/\s+/g, ' ').trim();
+        if (needle.length < 12)
+            continue;
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+            acceptNode: (node) => {
+                const p = node.parentElement;
+                if (!p)
+                    return NodeFilter.FILTER_REJECT;
+                if (p.closest('#echo-extension-root, script, style, noscript'))
+                    return NodeFilter.FILTER_REJECT;
+                if (p.classList.contains(MARK_CLASS))
+                    return NodeFilter.FILTER_REJECT;
+                return NodeFilter.FILTER_ACCEPT;
+            },
+        });
+        let node;
+        let done = false;
+        while (!done && (node = walker.nextNode())) {
+            const content = node.textContent || '';
+            // Only single-node matches; cross-element passages are skipped rather
+            // than risking a mangled DOM.
+            const idx = content.replace(/\s+/g, ' ').indexOf(needle);
+            if (idx === -1)
+                continue;
+            try {
+                const range = document.createRange();
+                range.setStart(node, idx);
+                range.setEnd(node, Math.min(idx + needle.length, content.length));
+                const mark = document.createElement('mark');
+                mark.className = MARK_CLASS;
+                mark.style.background = 'rgba(74,144,226,0.30)';
+                mark.style.color = 'inherit';
+                mark.style.borderRadius = '2px';
+                range.surroundContents(mark);
+                painted++;
+                done = true;
+            }
+            catch { /* skip this occurrence */ }
+        }
+    }
+    return painted;
+}
+function clearRenderedHighlights() {
+    document.querySelectorAll(`mark.${MARK_CLASS}`).forEach(m => {
+        const parent = m.parentNode;
+        if (!parent)
+            return;
+        while (m.firstChild)
+            parent.insertBefore(m.firstChild, m);
+        parent.removeChild(m);
+        parent.normalize();
+    });
+}
+function initHighlighter() {
+    if (injected)
+        return;
+    injected = true;
+    document.addEventListener('mouseup', onSelectionEnd, true);
+    document.addEventListener('scroll', removeChip, { passive: true });
+}
+
+
+/***/ },
+
+/***/ "./src/content/passive-observer.ts"
+/*!*****************************************!*\
+  !*** ./src/content/passive-observer.ts ***!
+  \*****************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   initPassiveObserver: () => (/* binding */ initPassiveObserver),
+/* harmony export */   stopPassiveObserver: () => (/* binding */ stopPassiveObserver)
+/* harmony export */ });
+/* harmony import */ var _form_filler__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./form-filler */ "./src/content/form-filler.ts");
+// Tier 2 — passive suggester.
+//
+// Purely rule-based: it watches dwell time, scroll depth and page shape, then
+// offers one relevant action. Nothing is sent anywhere and no model runs until
+// the user actually accepts a suggestion.
+
+const SHOWN_KEY = 'echo_suggest_shown';
+const DWELL_MS = 150_000; // ~2.5 min on one page
+const COOLDOWN_MS = 600_000; // at most one suggestion per 10 min, globally
+let started = false;
+let arrivedAt = 0;
+let maxScrollPct = 0;
+let firedThisPage = false;
+let timers = [];
+function pageKey() {
+    try {
+        const u = new URL(location.href);
+        return u.origin + u.pathname;
+    }
+    catch {
+        return location.href;
+    }
+}
+function textLength() {
+    return (document.body?.innerText || '').length;
+}
+async function recentlySuggested() {
+    return new Promise(resolve => {
+        chrome.storage.local.get([SHOWN_KEY], (r) => {
+            const last = r[SHOWN_KEY] || 0;
+            resolve(Date.now() - last < COOLDOWN_MS);
+        });
+    });
+}
+function markSuggested() {
+    chrome.storage.local.set({ [SHOWN_KEY]: Date.now() });
+}
+async function offer(s) {
+    if (firedThisPage)
+        return;
+    if (await recentlySuggested())
+        return;
+    // Never interrupt while the user is typing.
+    const ae = document.activeElement;
+    if (ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName))
+        return;
+    firedThisPage = true;
+    markSuggested();
+    window.postMessage({ source: 'echo-observer', type: 'ECHO_LOCAL_SUGGEST', ...s }, '*');
+}
+function checkForm() {
+    if (firedThisPage)
+        return;
+    const n = (0,_form_filler__WEBPACK_IMPORTED_MODULE_0__.countFillableFields)();
+    if (n >= 3) {
+        offer({ text: `This page has ${n} empty fields — want me to fill them from your saved info?`, action: 'fill form' });
+    }
+}
+function checkDwell() {
+    if (firedThisPage)
+        return;
+    if (textLength() < 2500)
+        return; // not an article
+    if (Date.now() - arrivedAt < DWELL_MS)
+        return;
+    offer({ text: "You've been reading a while — want a summary of this page?", action: 'summarize this page' });
+}
+function checkScrollDepth() {
+    if (firedThisPage)
+        return;
+    if (maxScrollPct < 88)
+        return;
+    if (textLength() < 3000)
+        return;
+    offer({ text: 'Reached the end — want me to save the key points?', action: 'summarize this page' });
+}
+function onScroll() {
+    const h = document.documentElement;
+    const total = h.scrollHeight - h.clientHeight;
+    if (total <= 0)
+        return;
+    const pct = (h.scrollTop / total) * 100;
+    if (pct > maxScrollPct)
+        maxScrollPct = pct;
+    if (maxScrollPct >= 88)
+        checkScrollDepth();
+}
+function reset() {
+    arrivedAt = Date.now();
+    maxScrollPct = 0;
+    firedThisPage = false;
+    timers.forEach(t => window.clearTimeout(t));
+    timers = [];
+    // Give SPAs time to render before judging the page.
+    timers.push(window.setTimeout(checkForm, 4000));
+    timers.push(window.setTimeout(checkDwell, DWELL_MS + 1000));
+}
+function initPassiveObserver() {
+    if (started)
+        return;
+    started = true;
+    reset();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    // SPA route changes don't reload the page — re-arm on URL change.
+    let lastKey = pageKey();
+    window.setInterval(() => {
+        const k = pageKey();
+        if (k !== lastKey) {
+            lastKey = k;
+            reset();
+        }
+    }, 3000);
+}
+function stopPassiveObserver() {
+    started = false;
+    window.removeEventListener('scroll', onScroll);
+    timers.forEach(t => window.clearTimeout(t));
+    timers = [];
+}
+
+
+/***/ },
+
+/***/ "./src/content/recorder.ts"
+/*!*********************************!*\
+  !*** ./src/content/recorder.ts ***!
+  \*********************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   buildSelectors: () => (/* binding */ buildSelectors),
+/* harmony export */   isRecordingActive: () => (/* binding */ isRecordingActive),
+/* harmony export */   playStep: () => (/* binding */ playStep),
+/* harmony export */   resolveStep: () => (/* binding */ resolveStep),
+/* harmony export */   startRecording: () => (/* binding */ startRecording),
+/* harmony export */   stopRecording: () => (/* binding */ stopRecording)
+/* harmony export */ });
+// Tier 0 — workflow recorder & step player (in-page half).
+//
+// Recording captures each interaction as a *list* of selector candidates,
+// strongest first, plus the element's visible label. Playback walks that list
+// until something resolves, so a workflow survives the class-name churn and
+// hashed attributes that break single-selector automation.
+let recording = false;
+let steps = [];
+let lastTypedTarget = null;
+let scrollTimer = null;
+let badge = null;
+// --- selector generation ---------------------------------------------------
+/** True for classes that look generated (hashes, CSS-modules, utility soup). */
+function isStableClass(c) {
+    if (!c || c.length < 3 || c.length > 40)
+        return false;
+    if (/^(css|sc|jsx|emotion)-/i.test(c))
+        return false;
+    if (/[0-9a-f]{6,}/i.test(c))
+        return false; // hashed
+    if (/^[a-z]{1,3}-?\d+$/i.test(c))
+        return false; // tailwind-ish p-4, mt-2
+    return true;
+}
+function nthOfTypePath(el) {
+    const parts = [];
+    let node = el;
+    let depth = 0;
+    while (node.nodeType === 1 && node !== document.body && depth < 6) {
+        const current = node;
+        const parent = current.parentElement;
+        if (!parent)
+            break;
+        const tag = current.tagName.toLowerCase();
+        const siblings = Array.from(parent.children)
+            .filter((c) => c.tagName === current.tagName);
+        const idx = siblings.indexOf(current) + 1;
+        parts.unshift(siblings.length > 1 ? `${tag}:nth-of-type(${idx})` : tag);
+        node = parent;
+        depth++;
+    }
+    return parts.join(' > ');
+}
+function buildSelectors(el) {
+    const out = [];
+    const tag = el.tagName.toLowerCase();
+    const add = (s) => { if (s && !out.includes(s))
+        out.push(s); };
+    const testId = el.getAttribute('data-testid') || el.getAttribute('data-test') || el.getAttribute('data-cy');
+    if (testId)
+        add(`[data-testid="${CSS.escape(testId)}"]`);
+    const id = el.getAttribute('id');
+    // Skip ids that look auto-generated (react-select-3-input, :r1a:, etc.)
+    if (id && !/^[:.]|\d{4,}|^ember|^react-/.test(id))
+        add(`#${CSS.escape(id)}`);
+    const name = el.getAttribute('name');
+    if (name)
+        add(`${tag}[name="${CSS.escape(name)}"]`);
+    const aria = el.getAttribute('aria-label');
+    if (aria)
+        add(`${tag}[aria-label="${CSS.escape(aria)}"]`);
+    const ph = el.getAttribute('placeholder');
+    if (ph)
+        add(`${tag}[placeholder="${CSS.escape(ph)}"]`);
+    const role = el.getAttribute('role');
+    const type = el.getAttribute('type');
+    if (type)
+        add(`${tag}[type="${CSS.escape(type)}"]`);
+    if (role)
+        add(`${tag}[role="${CSS.escape(role)}"]`);
+    const stable = Array.from(el.classList).filter(isStableClass).slice(0, 2);
+    if (stable.length)
+        add(`${tag}.${stable.map(c => CSS.escape(c)).join('.')}`);
+    add(nthOfTypePath(el));
+    return out;
+}
+function labelOf(el) {
+    const raw = (el.innerText ||
+        el.getAttribute('aria-label') ||
+        el.getAttribute('placeholder') ||
+        el.getAttribute('title') ||
+        el.getAttribute('name') ||
+        el.getAttribute('value') ||
+        '');
+    return String(raw).replace(/\s+/g, ' ').trim().slice(0, 60);
+}
+// --- selector resolution (playback) ----------------------------------------
+function visible(el) {
+    const s = getComputedStyle(el);
+    if (s.display === 'none' || s.visibility === 'hidden')
+        return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+}
+/** Try each selector in order; fall back to matching the visible label. */
+function resolveStep(step) {
+    for (const sel of step.selectors || []) {
+        try {
+            const found = Array.from(document.querySelectorAll(sel)).filter(visible);
+            if (found.length)
+                return found[0];
+        }
+        catch { /* invalid selector after a site redesign — try the next */ }
+    }
+    if (step.label && step.label.length > 2) {
+        const candidates = Array.from(document.querySelectorAll('a,button,input,textarea,select,[role="button"],[role="link"],[role="tab"],[contenteditable="true"]')).filter(visible);
+        const want = step.label.toLowerCase();
+        const exact = candidates.find(c => labelOf(c).toLowerCase() === want);
+        if (exact)
+            return exact;
+        const partial = candidates.find(c => {
+            const l = labelOf(c).toLowerCase();
+            return l.length > 2 && (l.includes(want) || want.includes(l));
+        });
+        if (partial)
+            return partial;
+    }
+    return null;
+}
+function setNativeValue(el, value) {
+    const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    if (setter)
+        setter.call(el, value);
+    else
+        el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+/** Execute one recorded step against the live page. */
+function playStep(step) {
+    if (step.type === 'scroll') {
+        window.scrollBy({ top: Number(step.value) || 0, behavior: 'smooth' });
+        return { success: true, result: 'scrolled' };
+    }
+    if (step.type === 'key') {
+        const target = document.activeElement || document.body;
+        const key = step.value || 'Enter';
+        const code = key === 'Enter' ? 13 : key === 'Escape' ? 27 : key === 'Tab' ? 9 : 0;
+        const opts = { key, code: key, keyCode: code, which: code, bubbles: true };
+        target.dispatchEvent(new KeyboardEvent('keydown', opts));
+        target.dispatchEvent(new KeyboardEvent('keypress', opts));
+        target.dispatchEvent(new KeyboardEvent('keyup', opts));
+        return { success: true, result: `pressed ${key}` };
+    }
+    const el = resolveStep(step);
+    if (!el)
+        return { success: false, error: `Could not find "${step.label || step.selectors?.[0] || step.type}"` };
+    try {
+        el.scrollIntoView({ block: 'center', inline: 'center' });
+    }
+    catch { /* ignore */ }
+    if (step.type === 'click') {
+        el.click();
+        return { success: true, result: `clicked ${step.label || ''}`.trim() };
+    }
+    if (step.type === 'type') {
+        el.focus();
+        if (el.isContentEditable) {
+            el.textContent = step.value || '';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        else {
+            setNativeValue(el, step.value || '');
+        }
+        return { success: true, result: `typed into ${step.label || 'field'}` };
+    }
+    return { success: false, error: `Unknown step type ${step.type}` };
+}
+// --- recording -------------------------------------------------------------
+function onClick(e) {
+    if (!recording)
+        return;
+    const el = e.target;
+    if (!el || !el.tagName)
+        return;
+    if (el.closest('#echo-extension-root'))
+        return; // never record ECHO's own UI
+    // Attribute the click to the nearest real control, not a nested <span>.
+    const actionable = el.closest('a,button,input,select,textarea,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[onclick],[contenteditable="true"]') || el;
+    flushTyping();
+    steps.push({ type: 'click', selectors: buildSelectors(actionable), label: labelOf(actionable) });
+    updateBadge();
+}
+/**
+ * Typing is captured on blur/enter rather than per-keystroke, so a 20-character
+ * field becomes one step with the final value instead of 20 noisy ones.
+ */
+function onInput(e) {
+    if (!recording)
+        return;
+    const el = e.target;
+    if (!el || el.closest('#echo-extension-root'))
+        return;
+    if (!/^(INPUT|TEXTAREA)$/.test(el.tagName) && !el.isContentEditable)
+        return;
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (type === 'password')
+        return; // never record secrets
+    lastTypedTarget = el;
+}
+function flushTyping() {
+    if (!lastTypedTarget)
+        return;
+    const el = lastTypedTarget;
+    lastTypedTarget = null;
+    const value = el.isContentEditable ? (el.textContent || '') : el.value;
+    if (!value)
+        return;
+    steps.push({ type: 'type', selectors: buildSelectors(el), label: labelOf(el), value });
+    updateBadge();
+}
+function onKeyDown(e) {
+    if (!recording)
+        return;
+    if (e.key === 'Enter') {
+        flushTyping();
+        steps.push({ type: 'key', value: 'Enter' });
+        updateBadge();
+    }
+}
+function onScroll() {
+    if (!recording)
+        return;
+    if (scrollTimer)
+        window.clearTimeout(scrollTimer);
+    // Collapse a scroll gesture into one step once it settles.
+    scrollTimer = window.setTimeout(() => {
+        const last = steps[steps.length - 1];
+        if (last?.type === 'scroll')
+            return;
+        steps.push({ type: 'scroll', value: String(Math.round(window.scrollY)) });
+        updateBadge();
+    }, 500);
+}
+function updateBadge() {
+    if (!badge)
+        return;
+    badge.textContent = `● REC — ${steps.length} step${steps.length === 1 ? '' : 's'}`;
+}
+function showBadge() {
+    if (badge)
+        return;
+    badge = document.createElement('div');
+    badge.id = 'echo-rec-badge';
+    Object.assign(badge.style, {
+        position: 'fixed', top: '14px', left: '50%', transform: 'translateX(-50%)',
+        background: 'rgba(239,68,68,0.95)', color: '#fff', padding: '6px 14px',
+        borderRadius: '20px', font: '600 12px -apple-system,sans-serif',
+        zIndex: '2147483647', pointerEvents: 'none', letterSpacing: '0.4px',
+        boxShadow: '0 4px 14px rgba(0,0,0,0.35)',
+    });
+    updateBadge();
+    document.body.appendChild(badge);
+}
+function hideBadge() {
+    badge?.remove();
+    badge = null;
+}
+function startRecording() {
+    steps = [];
+    lastTypedTarget = null;
+    recording = true;
+    document.addEventListener('click', onClick, true);
+    document.addEventListener('input', onInput, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    showBadge();
+    return { success: true, result: 'recording' };
+}
+function stopRecording() {
+    flushTyping();
+    recording = false;
+    document.removeEventListener('click', onClick, true);
+    document.removeEventListener('input', onInput, true);
+    document.removeEventListener('keydown', onKeyDown, true);
+    window.removeEventListener('scroll', onScroll);
+    if (scrollTimer) {
+        window.clearTimeout(scrollTimer);
+        scrollTimer = null;
+    }
+    hideBadge();
+    const captured = steps;
+    steps = [];
+    return { success: true, result: { steps: captured } };
+}
+function isRecordingActive() { return recording; }
 
 
 /***/ },
@@ -31694,6 +32727,7 @@ function EchoUI() {
     const [inputText, setInputText] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)('');
     const [chatVisible, setChatVisible] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)(false);
     const [logText, setLogText] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)('');
+    const [suggestion, setSuggestion] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)(null);
     const [position, setPosition] = (0,react__WEBPACK_IMPORTED_MODULE_1__.useState)({ x: window.innerWidth - 150, y: window.innerHeight - 150 });
     const positionRef = (0,react__WEBPACK_IMPORTED_MODULE_1__.useRef)(position);
     (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => { positionRef.current = position; }, [position]);
@@ -31725,6 +32759,39 @@ function EchoUI() {
         logTimerRef.current = setTimeout(() => {
             setLogText('');
         }, 4000);
+    };
+    // The passive observer posts suggestions on the page's own window. Any script
+    // on the page can forge such a message, so the action is never taken from the
+    // message — only a fixed allowlist index is honoured. A hostile page can at
+    // worst offer one of ECHO's own harmless local commands.
+    (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => {
+        const ALLOWED = {
+            'fill form': 'fill this form',
+            'summarize this page': 'summarize this page',
+        };
+        const onLocalSuggest = (event) => {
+            if (event.source !== window)
+                return;
+            const d = event.data;
+            if (d?.source !== 'echo-observer' || d?.type !== 'ECHO_LOCAL_SUGGEST')
+                return;
+            const action = ALLOWED[String(d.action || '')];
+            if (!action || !d.text)
+                return;
+            setSuggestion({ text: String(d.text).slice(0, 160), action });
+            window.setTimeout(() => setSuggestion(null), 18000);
+        };
+        window.addEventListener('message', onLocalSuggest);
+        return () => window.removeEventListener('message', onLocalSuggest);
+    }, []);
+    const acceptSuggestion = () => {
+        if (!suggestion)
+            return;
+        setVisible(true);
+        chrome.runtime.sendMessage({ type: 'USER_INPUT', text: suggestion.action });
+        showLog(`You: ${suggestion.action}`);
+        setStatus('thinking');
+        setSuggestion(null);
     };
     // Listen to iframe sandbox for speech events
     (0,react__WEBPACK_IMPORTED_MODULE_1__.useEffect)(() => {
@@ -31926,14 +32993,17 @@ function EchoUI() {
             iframeRef.current?.contentWindow?.postMessage({ type: 'START_RECOGNITION' }, '*');
         }
     };
+    // The proactive toast is independent of the orb — it can appear while ECHO
+    // is asleep, which is exactly when a passive suggestion is most useful.
+    const suggestionToast = suggestion ? ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { id: "echo-suggest-toast", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { className: "echo-suggest-text", children: suggestion.text }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { className: "echo-suggest-yes", onClick: acceptSuggestion, children: "Yes" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { className: "echo-suggest-no", onClick: () => setSuggestion(null), "aria-label": "Dismiss", children: "\u2715" })] })) : null;
     if (!visible)
-        return null;
-    return ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { id: "echo-root-wrapper", "data-status": status, style: {
-            position: 'absolute',
-            left: position.x,
-            top: position.y,
-            pointerEvents: 'auto'
-        }, children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("iframe", { ref: iframeRef, src: typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL ? chrome.runtime.getURL('speech.html') : '', style: { display: 'none' }, allow: "microphone", title: "ECHO Speech Sandbox" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { id: "echo-log-box", className: logText ? 'visible' : '', children: logText }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { id: "echo-chat-box", className: chatVisible ? 'visible' : '', children: (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("form", { onSubmit: handleSubmit, style: { display: 'flex', width: '100%', gap: '8px' }, children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { id: "input", ref: inputRef, type: "text", placeholder: "Type a command\u2026", autoComplete: "off", spellCheck: "false", value: inputText, onChange: e => setInputText(e.target.value) }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { ref: submitBtnRef, id: "echo-send-btn", type: "submit", title: "Send", disabled: !inputText.trim(), children: "\u27A4" })] }) }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { id: "orb", className: "reactor", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "reactor-inner circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "tunnel circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-wrapper circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "coil-container", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-1" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-2" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-3" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-4" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-5" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-6" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-7" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-8" })] }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-outer circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-inner circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-hitbox circle abs-center", title: "Click to talk, long-press to type, drag to move", onClick: handleClick, onPointerDown: handlePointerDown, style: { width: '45%', height: '45%', zIndex: 10, cursor: 'pointer', touchAction: 'none' } })] })] }));
+        return suggestionToast;
+    return ((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.Fragment, { children: [suggestionToast, (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { id: "echo-root-wrapper", "data-status": status, style: {
+                    position: 'absolute',
+                    left: position.x,
+                    top: position.y,
+                    pointerEvents: 'auto'
+                }, children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("iframe", { ref: iframeRef, src: typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL ? chrome.runtime.getURL('speech.html') : '', style: { display: 'none' }, allow: "microphone", title: "ECHO Speech Sandbox" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { id: "echo-log-box", className: logText ? 'visible' : '', children: logText }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { id: "echo-chat-box", className: chatVisible ? 'visible' : '', children: (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("form", { onSubmit: handleSubmit, style: { display: 'flex', width: '100%', gap: '8px' }, children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { id: "input", ref: inputRef, type: "text", placeholder: "Type a command\u2026", autoComplete: "off", spellCheck: "false", value: inputText, onChange: e => setInputText(e.target.value) }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { ref: submitBtnRef, id: "echo-send-btn", type: "submit", title: "Send", disabled: !inputText.trim(), children: "\u27A4" })] }) }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { id: "orb", className: "reactor", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "reactor-inner circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "tunnel circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-wrapper circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { className: "coil-container", children: [(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-1" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-2" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-3" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-4" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-5" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-6" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-7" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "coil coil-8" })] }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-outer circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-inner circle abs-center" }), (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { className: "core-hitbox circle abs-center", title: "Click to talk, long-press to type, drag to move", onClick: handleClick, onPointerDown: handlePointerDown, style: { width: '45%', height: '45%', zIndex: 10, cursor: 'pointer', touchAction: 'none' } })] })] })] }));
 }
 
 
@@ -32056,13 +33126,16 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var react_dom_client__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! react-dom/client */ "./node_modules/react-dom/client.js");
 /* harmony import */ var _actions__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./actions */ "./src/content/actions.ts");
 /* harmony import */ var _ui__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./ui */ "./src/content/ui.tsx");
+/* harmony import */ var _highlighter__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./highlighter */ "./src/content/highlighter.ts");
+/* harmony import */ var _passive_observer__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./passive-observer */ "./src/content/passive-observer.ts");
 
 
 
 
-// 1. Setup DOM Listener for AI Actions
+
+
+// 1. DOM actions requested by the background (model tools AND the local stack).
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    // Background forwards page actions as { type: 'DOM_ACTION', action, args }.
     if (message.type === 'DOM_ACTION') {
         try {
             const result = (0,_actions__WEBPACK_IMPORTED_MODULE_2__.handleDomAction)(message.action, message.args);
@@ -32071,33 +33144,86 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         catch (e) {
             sendResponse({ success: false, error: e.message });
         }
-        return true; // Keep message channel open for async response
+        return true; // keep the channel open
+    }
+    // Background pushes back the highlights it has stored for this page.
+    if (message.type === 'ECHO_APPLY_HIGHLIGHTS') {
+        try {
+            const painted = (0,_highlighter__WEBPACK_IMPORTED_MODULE_4__.renderHighlights)(message.texts || []);
+            sendResponse({ success: true, painted });
+        }
+        catch {
+            sendResponse({ success: false });
+        }
+        return true;
     }
 });
-// 2. Inject React UI globally
+// 2. Inject the React UI (reactor orb + chat + suggestion toast).
 const initUI = () => {
+    if (document.getElementById('echo-extension-root'))
+        return;
     const container = document.createElement('div');
     container.id = 'echo-extension-root';
-    // Ensure the container itself floats above everything so it's not affected by page flow
     container.style.position = 'fixed';
     container.style.top = '0';
     container.style.left = '0';
     container.style.width = '100vw';
     container.style.height = '100vh';
     container.style.zIndex = '2147483647';
-    container.style.pointerEvents = 'none'; // Let clicks pass through if not on the reactor itself
+    container.style.pointerEvents = 'none'; // clicks pass through except on the orb
     document.body.appendChild(container);
     const root = (0,react_dom_client__WEBPACK_IMPORTED_MODULE_1__.createRoot)(container);
-    // We wrap EchoUI in a div with pointerEvents: auto so the reactor is clickable,
-    // while the rest of the invisible container lets clicks pass through to the page.
     root.render((0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { pointerEvents: 'auto' }, children: (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(_ui__WEBPACK_IMPORTED_MODULE_3__.EchoUI, {}) }));
 };
-// Wait for DOM to be ready
+// 3. Local-first features that run without any user action.
+const initLocalFeatures = () => {
+    chrome.storage.local.get(['echo_local_settings'], (r) => {
+        const s = (r.echo_local_settings || {});
+        const autoIndex = s.autoIndex !== false;
+        const passive = s.passiveSuggest !== false;
+        // Highlight capture is always on — it is purely local and user-initiated.
+        (0,_highlighter__WEBPACK_IMPORTED_MODULE_4__.initHighlighter)();
+        if (passive)
+            (0,_passive_observer__WEBPACK_IMPORTED_MODULE_5__.initPassiveObserver)();
+        if (autoIndex)
+            reportPageToKB();
+        // Ask the background for any highlights saved on this page.
+        chrome.runtime.sendMessage({ type: 'ECHO_GET_HIGHLIGHTS', url: location.href })
+            .then((res) => {
+            if (res?.texts?.length)
+                (0,_highlighter__WEBPACK_IMPORTED_MODULE_4__.renderHighlights)(res.texts);
+        })
+            .catch(() => { });
+    });
+};
+/** Hand the readable text of this page to the background knowledge base. */
+function reportPageToKB() {
+    // Wait for the page to settle so SPAs have rendered their real content.
+    setTimeout(() => {
+        try {
+            if (!/^https?:/.test(location.href))
+                return;
+            const main = document.querySelector('article, main, [role="main"]');
+            const source = main && main.innerText.length > 400 ? main : document.body;
+            const text = (source?.innerText || '').replace(/\n\s*\n/g, '\n').trim();
+            if (text.length < 250)
+                return;
+            chrome.runtime.sendMessage({
+                type: 'ECHO_INDEX_PAGE',
+                url: location.href,
+                title: document.title,
+                text: text.substring(0, 6000),
+            }).catch(() => { });
+        }
+        catch { /* ignore */ }
+    }, 2500);
+}
+const boot = () => { initUI(); initLocalFeatures(); };
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    initUI();
+    boot();
 }
 else {
-    window.addEventListener('DOMContentLoaded', initUI);
+    window.addEventListener('DOMContentLoaded', boot);
 }
 
 })();

@@ -1178,12 +1178,15 @@ function getAuthConfig() {
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   abortCurrentWork: () => (/* binding */ abortCurrentWork),
+/* harmony export */   lastCloudReply: () => (/* binding */ lastCloudReply),
 /* harmony export */   processUserInput: () => (/* binding */ processUserInput)
 /* harmony export */ });
 /* harmony import */ var _anthropic_ai_sdk__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @anthropic-ai/sdk */ "./node_modules/@anthropic-ai/sdk/index.mjs");
 /* harmony import */ var _google_genai__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @google/genai */ "./node_modules/@google/genai/dist/web/index.mjs");
 /* harmony import */ var _auth__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./auth */ "./src/background/auth.ts");
 /* harmony import */ var _tools__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./tools */ "./src/background/tools.ts");
+/* harmony import */ var _bus__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./bus */ "./src/background/bus.ts");
+
 
 
 
@@ -1207,217 +1210,65 @@ RULE 4 — BE TOKEN-EFFICIENT (CRITICAL — the user has limited API quota):
 - Finish in the fewest steps that get the job done.
 
 RULE 5 — SPEAK NATURALLY: Short, natural replies. Never read out raw HTML or code. When done, briefly say what you did.`;
-const SHARED_TOOLS = [
-    {
-        name: "read_screen",
-        description: "Read the page: URL, title, NUMBERED interactive elements, and visible text. Call once before clicking/typing to get element numbers.",
-        schema: { type: "object", properties: {} }
-    },
-    {
-        name: "get_page_text",
-        description: "Get the page's readable text (for summarizing / answering about content).",
-        schema: { type: "object", properties: {} }
-    },
-    {
-        name: "screenshot",
-        description: "Take a visual screenshot. ONLY use for images, colors, or visual layout questions that read_screen cannot answer — it burns API quota.",
-        schema: { type: "object", properties: {} }
-    },
-    {
-        name: "click_element",
-        description: "Click a numbered element from read_screen. Pass its number as 'index'. If the number is missing or wrong, call read_screen again first.",
-        schema: {
-            type: "object",
-            properties: { index: { type: "number", description: "The [number] of the element from read_screen" } },
-            required: ["index"]
-        }
-    },
-    {
-        name: "type_text",
-        description: "Type into a numbered input. submit=true presses Enter (e.g. to search) in one step.",
-        schema: {
-            type: "object",
-            properties: {
-                index: { type: "number", description: "element number from read_screen" },
-                text: { type: "string" },
-                submit: { type: "boolean" }
-            },
-            required: ["index", "text"]
-        }
-    },
-    {
-        name: "press_key",
-        description: "Press one key (Enter, Escape, Tab, Backspace, Delete, Arrow keys) on the focused element.",
-        schema: {
-            type: "object",
-            properties: { key: { type: "string" } },
-            required: ["key"]
-        }
-    },
-    {
-        name: "scroll",
-        description: "Scroll the page vertically. Positive amount scrolls down, negative scrolls up (in pixels).",
-        schema: {
-            type: "object",
-            properties: { amount: { type: "number", description: "Pixels to scroll (positive down, negative up)" } },
-            required: ["amount"]
-        }
-    },
-    {
-        name: "find_on_page",
-        description: "Find text on the page, scroll it into view, and briefly highlight it. Returns whether it was found.",
-        schema: {
-            type: "object",
-            properties: { text: { type: "string", description: "The text to find" } },
-            required: ["text"]
-        }
-    },
-    {
-        name: "extract_table",
-        description: "Extract a table from the page as JSON rows. Optional 'index' picks which table (default 0).",
-        schema: {
-            type: "object",
-            properties: { index: { type: "number", description: "Which table to extract (0-based, optional)" } }
-        }
-    },
-    {
-        name: "open_url",
-        description: "Open a URL in a NEW browser tab.",
-        schema: {
-            type: "object",
-            properties: { url: { type: "string", description: "The URL to open" } },
-            required: ["url"]
-        }
-    },
-    {
-        name: "navigate",
-        description: "Navigate the CURRENT tab to a URL (does not open a new tab).",
-        schema: {
-            type: "object",
-            properties: { url: { type: "string", description: "The URL to navigate to" } },
-            required: ["url"]
-        }
-    },
-    {
-        name: "go_back",
-        description: "Go back one step in the current tab's history.",
-        schema: { type: "object", properties: {} }
-    },
-    {
-        name: "go_forward",
-        description: "Go forward one step in the current tab's history.",
-        schema: { type: "object", properties: {} }
-    },
-    {
-        name: "list_tabs",
-        description: "List the user's open tabs (id, title, url). Use before switching or closing tabs.",
-        schema: { type: "object", properties: {} }
-    },
-    {
-        name: "switch_tab",
-        description: "Focus/activate an open tab by its id (from list_tabs).",
-        schema: {
-            type: "object",
-            properties: { tabId: { type: "number", description: "The id of the tab to activate" } },
-            required: ["tabId"]
-        }
-    },
-    {
-        name: "close_tab",
-        description: "Close an open tab by its id (from list_tabs).",
-        schema: {
-            type: "object",
-            properties: { tabId: { type: "number", description: "The id of the tab to close" } },
-            required: ["tabId"]
-        }
-    },
-    {
-        name: "download_data",
-        description: "Save text content (CSV, JSON, notes, extracted data) as a file download for the user.",
-        schema: {
-            type: "object",
-            properties: {
-                filename: { type: "string", description: "The filename, e.g. 'data.csv'" },
-                content: { type: "string", description: "The text content of the file" }
-            },
-            required: ["filename", "content"]
-        }
-    },
-    {
-        name: "save_memory",
-        description: "Save a fact, preference, or task into ECHO's long-term memory so you remember it across sessions.",
-        schema: {
-            type: "object",
-            properties: {
-                key: { type: "string", description: "A unique, concise key (e.g. 'user_name', 'default_email')" },
-                value: { type: "string", description: "The information to remember" }
-            },
-            required: ["key", "value"]
-        }
-    },
-    {
-        name: "list_memory",
-        description: "List everything currently saved in ECHO's long-term memory.",
-        schema: { type: "object", properties: {} }
-    },
-    {
-        name: "delete_memory",
-        description: "Delete a fact from ECHO's long-term memory by its key.",
-        schema: {
-            type: "object",
-            properties: { key: { type: "string", description: "The key of the memory to delete" } },
-            required: ["key"]
-        }
-    },
-    {
-        name: "save_task",
-        description: "Save a reusable named task (macro) as plain-English instructions to re-run later.",
-        schema: {
-            type: "object",
-            properties: {
-                name: { type: "string", description: "Short name for the task" },
-                instructions: { type: "string", description: "The step-by-step instructions to run later" }
-            },
-            required: ["name", "instructions"]
-        }
-    },
-    {
-        name: "run_task",
-        description: "Load a saved task by name. After calling this, immediately carry out the returned instructions using your tools.",
-        schema: {
-            type: "object",
-            properties: { name: { type: "string", description: "The name of the saved task" } },
-            required: ["name"]
-        }
-    },
-    {
-        name: "list_tasks",
-        description: "List all saved tasks (macros) and their instructions.",
-        schema: { type: "object", properties: {} }
-    },
-    {
-        name: "delete_task",
-        description: "Delete a saved task by name.",
-        schema: {
-            type: "object",
-            properties: { name: { type: "string", description: "The name of the saved task" } },
-            required: ["name"]
-        }
-    },
-    {
-        name: "schedule_reminder",
-        description: "Set a reminder that fires a desktop notification after a delay. Optionally attach a saved task name so clicking the notification runs that task.",
-        schema: {
-            type: "object",
-            properties: {
-                message: { type: "string", description: "The reminder message to show" },
-                in_minutes: { type: "number", description: "Minutes from now to fire the reminder (min 0.5)" },
-                task_name: { type: "string", description: "Optional: a saved task to offer to run when clicked" }
-            },
-            required: ["message", "in_minutes"]
-        }
-    }
+// ─── Core tools — always sent (covers 90 % of tasks) ───────────────────────
+// Kept deliberately short: every extra word in a description costs tokens on
+// EVERY step of EVERY task. At 25 tools × 70 tokens × 5 steps that was
+// ~8,750 tokens of pure schema overhead per task, burning free-tier quota in
+// 1-2 tasks. Keeping the always-sent set to 10 slim tools cuts that to ~800.
+const CORE_TOOLS = [
+    { name: "read_screen", description: "Get page URL, title, numbered interactive elements, visible text.", schema: { type: "object", properties: {} } },
+    { name: "get_page_text", description: "Get full readable page text (use to summarize or answer about content).", schema: { type: "object", properties: {} } },
+    { name: "click_element", description: "Click element by number from read_screen.", schema: { type: "object", properties: { index: { type: "number" } }, required: ["index"] } },
+    { name: "type_text", description: "Type into input by number. submit=true presses Enter.", schema: { type: "object", properties: { index: { type: "number" }, text: { type: "string" }, submit: { type: "boolean" } }, required: ["index", "text"] } },
+    { name: "press_key", description: "Press key on focused element: Enter, Escape, Tab, Backspace, ArrowUp/Down/Left/Right.", schema: { type: "object", properties: { key: { type: "string" } }, required: ["key"] } },
+    { name: "scroll", description: "Scroll page (pixels, positive=down, negative=up).", schema: { type: "object", properties: { amount: { type: "number" } }, required: ["amount"] } },
+    { name: "open_url", description: "Open URL in a new tab.", schema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] } },
+    { name: "navigate", description: "Navigate current tab to URL.", schema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] } },
+    { name: "go_back", description: "Go back in browser history.", schema: { type: "object", properties: {} } },
+    { name: "go_forward", description: "Go forward in browser history.", schema: { type: "object", properties: {} } },
 ];
+// ─── Optional tools — added only when the user's request needs them ─────────
+const _T_SCREENSHOT = { name: "screenshot", description: "Take visual screenshot (only for color/image questions).", schema: { type: "object", properties: {} } };
+const _T_FIND = { name: "find_on_page", description: "Find and highlight text on page.", schema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } };
+const _T_TABLE = { name: "extract_table", description: "Extract table as JSON (index=which table, default 0).", schema: { type: "object", properties: { index: { type: "number" } } } };
+const _T_DOWNLOAD = { name: "download_data", description: "Save text as file download.", schema: { type: "object", properties: { filename: { type: "string" }, content: { type: "string" } }, required: ["filename", "content"] } };
+const _T_LIST_TABS = { name: "list_tabs", description: "List open tabs.", schema: { type: "object", properties: {} } };
+const _T_SWITCH_TAB = { name: "switch_tab", description: "Switch to tab by id.", schema: { type: "object", properties: { tabId: { type: "number" } }, required: ["tabId"] } };
+const _T_CLOSE_TAB = { name: "close_tab", description: "Close tab by id.", schema: { type: "object", properties: { tabId: { type: "number" } }, required: ["tabId"] } };
+const _T_SAVE_MEM = { name: "save_memory", description: "Save fact to memory.", schema: { type: "object", properties: { key: { type: "string" }, value: { type: "string" } }, required: ["key", "value"] } };
+const _T_LIST_MEM = { name: "list_memory", description: "List saved memories.", schema: { type: "object", properties: {} } };
+const _T_DEL_MEM = { name: "delete_memory", description: "Delete memory by key.", schema: { type: "object", properties: { key: { type: "string" } }, required: ["key"] } };
+const _T_SAVE_TASK = { name: "save_task", description: "Save reusable task by name.", schema: { type: "object", properties: { name: { type: "string" }, instructions: { type: "string" } }, required: ["name", "instructions"] } };
+const _T_RUN_TASK = { name: "run_task", description: "Run saved task by name.", schema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } };
+const _T_LIST_TASKS = { name: "list_tasks", description: "List saved tasks.", schema: { type: "object", properties: {} } };
+const _T_DEL_TASK = { name: "delete_task", description: "Delete saved task by name.", schema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } };
+const _T_REMINDER = { name: "schedule_reminder", description: "Schedule reminder notification (message, in_minutes, optional task_name).", schema: { type: "object", properties: { message: { type: "string" }, in_minutes: { type: "number" }, task_name: { type: "string" } }, required: ["message", "in_minutes"] } };
+// Select only the tools the current request likely needs.
+// This is the single biggest token-saving mechanism: on a simple "search for X"
+// task we send 10 tools (~800 tokens) instead of 25 tools (~2,500 tokens).
+function selectTools(userInput) {
+    const q = userInput.toLowerCase();
+    const tools = [...CORE_TOOLS];
+    if (/screenshot|image|color|colour|picture|visual|photo|look like/.test(q))
+        tools.push(_T_SCREENSHOT);
+    if (/find|highlight|locate|where is|search.*page/.test(q))
+        tools.push(_T_FIND);
+    if (/table|extract|spreadsheet|csv/.test(q))
+        tools.push(_T_TABLE, _T_DOWNLOAD);
+    if (/download|export|save.{0,10}(file|data)|write.*file/.test(q))
+        tools.push(_T_DOWNLOAD);
+    if (/tab|window|switch tab|other tab|list tab/.test(q))
+        tools.push(_T_LIST_TABS, _T_SWITCH_TAB, _T_CLOSE_TAB);
+    if (/remember|memory|forget|recall|store|you know/.test(q))
+        tools.push(_T_SAVE_MEM, _T_LIST_MEM, _T_DEL_MEM);
+    if (/task|macro|save.*task|run.*task|saved task/.test(q))
+        tools.push(_T_SAVE_TASK, _T_RUN_TASK, _T_LIST_TASKS, _T_DEL_TASK);
+    if (/remind|reminder|alert|notify|in \d+ min/.test(q))
+        tools.push(_T_REMINDER);
+    // Deduplicate (in case a keyword matched multiple groups)
+    const seen = new Set();
+    return tools.filter(t => seen.has(t.name) ? false : (seen.add(t.name), true));
+}
 // Memory state (cleared per session for simplicity in this demo)
 let anthropicClient = null;
 let currentConversation = [];
@@ -1557,31 +1408,20 @@ async function getClients(config) {
     }
     return { anthropicClient, geminiClient };
 }
-// Append an entry to the persistent transcript (capped) for the side panel.
-function pushTranscript(entry) {
-    chrome.storage.local.get(['echo_transcript'], (r) => {
-        const t = (r.echo_transcript || []);
-        t.push({ ...entry, ts: Date.now() });
-        chrome.storage.local.set({ echo_transcript: t.slice(-200) });
-    });
-}
-// Single choke point for UI updates. Sends to the content-script orb on the
-// active tab AND mirrors conversational messages to extension pages (the side
-// panel / popup) so every surface stays in sync. Persists spoken replies.
+// UI delivery lives in bus.ts so the local tiers and the cloud brain reach the
+// orb, the side panel and the transcript through exactly the same path.
+// Everything the cloud says is also kept here so the router can cache it.
+let _lastCloudReply = '';
+/** The most recent thing the cloud tier said. Consumed by smart-router. */
+function lastCloudReply() { return _lastCloudReply; }
 function safeSendMessage(tabId, msg) {
-    if (tabId !== undefined && tabId !== null) {
-        chrome.tabs.sendMessage(tabId, msg).catch(() => { });
-    }
-    if (msg.type === 'ECHO_SAY' || msg.type === 'ECHO_STATE' || msg.type === 'ECHO_USAGE') {
-        // Reaches the side panel / popup. No-op (caught) if none are open.
-        try {
-            chrome.runtime.sendMessage(msg).catch(() => { });
-        }
-        catch { /* ignore */ }
-    }
     if (msg.type === 'ECHO_SAY' && typeof msg.text === 'string') {
-        pushTranscript({ role: 'echo', text: msg.text });
+        // Accumulate multi-block replies so the cached answer is the whole thing.
+        _lastCloudReply = _lastCloudReply ? `${_lastCloudReply}\n${msg.text}` : msg.text;
+        (0,_bus__WEBPACK_IMPORTED_MODULE_4__.say)(tabId, msg.text, 3);
+        return;
     }
+    ;(0,_bus__WEBPACK_IMPORTED_MODULE_4__.safeSendMessage)(tabId, msg);
 }
 // --- Live usage metering (per task + per session) ---
 let taskUsage = { steps: 0, input: 0, output: 0 };
@@ -1605,7 +1445,7 @@ function getEchoMemory() {
         chrome.storage.local.get(['echo_memory'], (result) => resolve(result.echo_memory || {}));
     });
 }
-async function processUserInput(userInput, tabId) {
+async function processUserInput(userInput, tabId, opts = {}) {
     abortCurrentWork();
     currentAbortController = new AbortController();
     const signal = currentAbortController.signal;
@@ -1619,12 +1459,9 @@ async function processUserInput(userInput, tabId) {
         catch { /* ignore */ }
     }
     resetTaskUsage();
-    // Record the user's message so the side panel transcript shows it immediately.
-    pushTranscript({ role: 'user', text: userInput });
-    try {
-        chrome.runtime.sendMessage({ type: 'ECHO_USER_ECHO', text: userInput }).catch(() => { });
-    }
-    catch { /* ignore */ }
+    _lastCloudReply = ''; // fresh buffer so the router caches only this answer
+    if (!opts.skipEcho)
+        (0,_bus__WEBPACK_IMPORTED_MODULE_4__.echoUser)(userInput);
     try {
         const config = await (0,_auth__WEBPACK_IMPORTED_MODULE_2__.getAuthConfig)();
         const { anthropicClient, geminiClient } = await getClients(config);
@@ -1659,22 +1496,33 @@ async function processUserInput(userInput, tabId) {
             safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
             return;
         }
-        safeSendMessage(tabId, { type: 'ECHO_SAY', text: 'Auth/Init Error: ' + err.message });
+        // No key configured is not a dead end any more — the local tiers cover a
+        // lot on their own, so say what still works instead of just erroring.
+        const noKey = /API Key/i.test(err.message || '');
+        safeSendMessage(tabId, {
+            type: 'ECHO_SAY',
+            text: noKey
+                ? `${err.message}\n\nThat only limits complex tasks — I still work without a key: summarising pages, extracting emails/prices/links, filling forms, recording and replaying workflows, watching pages for changes, saving highlights, and remembering what you've read.`
+                : 'Auth/Init Error: ' + err.message,
+        });
         safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Error' });
     }
 }
 async function runClaudeLoop(client, userInput, tabId, signal, systemPrompt) {
+    // Mutable — updated when open_url creates a new tab or switch_tab changes focus.
+    let activeTabId = tabId;
     try {
         currentConversation = pruneClaude(currentConversation);
         currentConversation.push({ role: 'user', content: userInput });
         // Prompt caching: mark the static system prompt + tools block so repeated
         // in-task requests bill them at the reduced cache-read rate on Claude.
         const cachedSystem = [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }];
-        const claudeTools = SHARED_TOOLS.map((t, i) => ({
+        const activeTools = selectTools(userInput);
+        const claudeTools = activeTools.map((t, i) => ({
             name: t.name,
             description: t.description,
             input_schema: t.schema,
-            ...(i === SHARED_TOOLS.length - 1 ? { cache_control: { type: 'ephemeral' } } : {})
+            ...(i === activeTools.length - 1 ? { cache_control: { type: 'ephemeral' } } : {})
         }));
         let isFinished = false;
         let steps = 0;
@@ -1682,8 +1530,8 @@ async function runClaudeLoop(client, userInput, tabId, signal, systemPrompt) {
             if (signal.aborted)
                 throw new Error('Aborted by user');
             if (steps++ >= MAX_STEPS) {
-                safeSendMessage(tabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
-                safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+                safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
+                safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
                 break;
             }
             // Collapse stale screen/tool data so per-request size stays bounded.
@@ -1696,18 +1544,23 @@ async function runClaudeLoop(client, userInput, tabId, signal, systemPrompt) {
                 tools: claudeTools
             }, { signal });
             const cu = response.usage || {};
-            accumulateUsage(tabId, (cu.input_tokens || 0) + (cu.cache_read_input_tokens || 0) + (cu.cache_creation_input_tokens || 0), cu.output_tokens || 0);
+            accumulateUsage(activeTabId, (cu.input_tokens || 0) + (cu.cache_read_input_tokens || 0) + (cu.cache_creation_input_tokens || 0), cu.output_tokens || 0);
             currentConversation.push({ role: 'assistant', content: response.content });
             let toolUsed = false;
             for (const block of response.content) {
                 if (block.type === 'text') {
-                    safeSendMessage(tabId, { type: 'ECHO_SAY', text: block.text });
+                    safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: block.text });
                 }
                 else if (block.type === 'tool_use') {
                     toolUsed = true;
-                    safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Executing ' + block.name + '...' });
+                    safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Executing ' + block.name + '...' });
                     try {
-                        const result = await (0,_tools__WEBPACK_IMPORTED_MODULE_3__.executeTool)(block.name, block.input, tabId);
+                        const result = await (0,_tools__WEBPACK_IMPORTED_MODULE_3__.executeTool)(block.name, block.input, activeTabId);
+                        // Keep activeTabId in sync so subsequent DOM actions hit the right tab.
+                        if (block.name === 'open_url' && result?.newTabId)
+                            activeTabId = result.newTabId;
+                        if (block.name === 'switch_tab' && block.input?.tabId)
+                            activeTabId = Number(block.input.tabId);
                         let toolResultContent = [];
                         if (block.name === 'screenshot' && result.dataUrl) {
                             const base64Data = result.dataUrl.split(',')[1];
@@ -1734,17 +1587,17 @@ async function runClaudeLoop(client, userInput, tabId, signal, systemPrompt) {
             }
             if (!toolUsed) {
                 isFinished = true;
-                safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+                safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
             }
         }
     }
     catch (err) {
         if (err.message === 'Aborted by user' || err.name === 'AbortError') {
-            safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+            safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
             return;
         }
-        safeSendMessage(tabId, { type: 'ECHO_SAY', text: 'Claude Error: ' + err.message });
-        safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Error' });
+        safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: 'Claude Error: ' + err.message });
+        safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Error' });
     }
 }
 // Generic JSON-schema -> Google GenAI schema converter.
@@ -1771,6 +1624,7 @@ function toGeminiSchema(schema) {
     return node;
 }
 async function runGeminiLoop(client, userInput, tabId, signal, systemPrompt) {
+    let activeTabId = tabId;
     try {
         currentGeminiConversation = pruneGemini(currentGeminiConversation);
         currentGeminiConversation.push({ role: "user", parts: [{ text: userInput }] });
@@ -1785,10 +1639,11 @@ async function runGeminiLoop(client, userInput, tabId, signal, systemPrompt) {
             'gemini-1.5-pro'
         ];
         let modelIndex = 0;
+        const activeTools = selectTools(userInput);
         while (!isFinished) {
             if (steps++ >= MAX_STEPS) {
-                safeSendMessage(tabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
-                safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+                safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
+                safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
                 break;
             }
             compressGemini(currentGeminiConversation);
@@ -1798,7 +1653,7 @@ async function runGeminiLoop(client, userInput, tabId, signal, systemPrompt) {
                 if (signal.aborted)
                     throw new Error('Aborted by user');
                 try {
-                    const functionDeclarations = SHARED_TOOLS.map(t => ({
+                    const functionDeclarations = activeTools.map(t => ({
                         name: t.name,
                         description: t.description,
                         parameters: toGeminiSchema(t.schema)
@@ -1827,7 +1682,7 @@ async function runGeminiLoop(client, userInput, tabId, signal, systemPrompt) {
             }
             if (!succeeded || !response)
                 throw new Error('All Gemini models are unavailable (404). Try using Claude instead.');
-            accumulateUsage(tabId, response.usageMetadata?.promptTokenCount || 0, response.usageMetadata?.candidatesTokenCount || 0);
+            accumulateUsage(activeTabId, response.usageMetadata?.promptTokenCount || 0, response.usageMetadata?.candidatesTokenCount || 0);
             const content = response.candidates?.[0]?.content;
             if (!content)
                 break;
@@ -1838,40 +1693,36 @@ async function runGeminiLoop(client, userInput, tabId, signal, systemPrompt) {
                 if (p.text?.trim()) {
                     if (signal.aborted)
                         throw new Error('Aborted by user');
-                    safeSendMessage(tabId, { type: 'ECHO_SAY', text: p.text.trim() });
+                    safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: p.text.trim() });
                 }
             }
             if (!calls.length) {
                 isFinished = true;
-                safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+                safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
                 break;
             }
             const responseParts = [];
             for (const call of calls) {
                 if (!call || !call.name)
                     continue;
-                safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Executing ' + call.name + '...' });
+                safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Executing ' + call.name + '...' });
                 try {
-                    const result = await (0,_tools__WEBPACK_IMPORTED_MODULE_3__.executeTool)(call.name, call.args, tabId);
+                    const result = await (0,_tools__WEBPACK_IMPORTED_MODULE_3__.executeTool)(call.name, call.args, activeTabId);
+                    if (call.name === 'open_url' && result?.newTabId)
+                        activeTabId = result.newTabId;
+                    if (call.name === 'switch_tab' && call.args?.tabId)
+                        activeTabId = Number(call.args.tabId);
                     if (call.name === 'screenshot' && result.dataUrl) {
                         const base64Data = result.dataUrl.split(',')[1];
-                        responseParts.push({
-                            functionResponse: { name: call.name, response: { result: "Screenshot taken successfully." } }
-                        });
-                        responseParts.push({
-                            inlineData: { mimeType: 'image/png', data: base64Data }
-                        });
+                        responseParts.push({ functionResponse: { name: call.name, response: { result: "Screenshot taken successfully." } } });
+                        responseParts.push({ inlineData: { mimeType: 'image/png', data: base64Data } });
                     }
                     else {
-                        responseParts.push({
-                            functionResponse: { name: call.name, response: { result } }
-                        });
+                        responseParts.push({ functionResponse: { name: call.name, response: { result } } });
                     }
                 }
                 catch (e) {
-                    responseParts.push({
-                        functionResponse: { name: call.name, response: { error: String(e.message || e) } }
-                    });
+                    responseParts.push({ functionResponse: { name: call.name, response: { error: String(e.message || e) } } });
                 }
             }
             currentGeminiConversation.push({ role: "user", parts: responseParts });
@@ -1879,11 +1730,11 @@ async function runGeminiLoop(client, userInput, tabId, signal, systemPrompt) {
     }
     catch (err) {
         if (err.message === 'Aborted by user' || err.name === 'AbortError') {
-            safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+            safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
             return;
         }
-        safeSendMessage(tabId, { type: 'ECHO_SAY', text: 'Gemini Error: ' + err.message });
-        safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Error' });
+        safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: 'Gemini Error: ' + err.message });
+        safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Error' });
     }
 }
 // Extract a balanced { ... } JSON object starting at `start` in `text`.
@@ -1948,15 +1799,13 @@ function looseToToolCalls(loose) {
 }
 // Generic OpenAI-compatible loop (used by Together AI & OpenRouter)
 async function runOpenAICompatibleLoop(endpoint, apiKey, model, userInput, tabId, signal, systemPrompt) {
+    let activeTabId = tabId;
     try {
-        // Build tools in OpenAI function-calling format
-        const openaiTools = SHARED_TOOLS.map(t => ({
+        // Build tools in OpenAI function-calling format — only the tools this
+        // request needs (dynamic selection cuts schema tokens by ~60–70 %).
+        const openaiTools = selectTools(userInput).map(t => ({
             type: 'function',
-            function: {
-                name: t.name,
-                description: t.description,
-                parameters: t.schema
-            }
+            function: { name: t.name, description: t.description, parameters: t.schema }
         }));
         currentOpenAIConversation = pruneOpenAI(currentOpenAIConversation);
         currentOpenAIConversation.push({ role: 'user', content: userInput });
@@ -1966,11 +1815,10 @@ async function runOpenAICompatibleLoop(endpoint, apiKey, model, userInput, tabId
             if (signal.aborted)
                 throw new Error('Aborted by user');
             if (steps++ >= MAX_STEPS) {
-                safeSendMessage(tabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
-                safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+                safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
+                safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
                 break;
             }
-            // Collapse stale tool outputs so per-request size stays bounded.
             compressOpenAI(currentOpenAIConversation);
             const res = await fetch(endpoint, {
                 method: 'POST',
@@ -1982,10 +1830,7 @@ async function runOpenAICompatibleLoop(endpoint, apiKey, model, userInput, tabId
                 },
                 body: JSON.stringify({
                     model,
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        ...currentOpenAIConversation
-                    ],
+                    messages: [{ role: 'system', content: systemPrompt }, ...currentOpenAIConversation],
                     tools: openaiTools,
                     tool_choice: 'auto',
                     max_tokens: 900
@@ -1995,10 +1840,11 @@ async function runOpenAICompatibleLoop(endpoint, apiKey, model, userInput, tabId
             let msg;
             if (!res.ok) {
                 const errText = await res.text();
-                // Groq/Llama sometimes emit a tool call as malformed text (e.g.
-                // `<function=open_url{"url":"..."}>`) instead of a structured tool_call,
-                // and Groq 400s with the raw text in `failed_generation`. Recover the
-                // intended call instead of crashing.
+                // Friendly rate-limit message instead of a cryptic 429 dump.
+                if (res.status === 429) {
+                    throw new Error('Rate limit reached — please wait a moment then try again. (Free tier quota: ~6,000 tokens/min on Groq.)');
+                }
+                // Groq/Llama 400: model emitted a malformed text tool call — recover it.
                 let recovered = null;
                 if (res.status === 400 && errText.includes('failed_generation')) {
                     try {
@@ -2007,20 +1853,19 @@ async function runOpenAICompatibleLoop(endpoint, apiKey, model, userInput, tabId
                         if (loose.length)
                             recovered = looseToToolCalls(loose);
                     }
-                    catch { /* fall through to throw */ }
+                    catch { /* fall through */ }
                 }
                 if (!recovered)
-                    throw new Error(`API Error ${res.status}: ${errText}`);
+                    throw new Error(`API Error ${res.status}: ${errText.slice(0, 300)}`);
                 msg = { role: 'assistant', content: null, tool_calls: recovered };
             }
             else {
                 const data = await res.json();
-                accumulateUsage(tabId, data.usage?.prompt_tokens || 0, data.usage?.completion_tokens || 0);
+                accumulateUsage(activeTabId, data.usage?.prompt_tokens || 0, data.usage?.completion_tokens || 0);
                 msg = data.choices?.[0]?.message;
                 if (!msg)
                     throw new Error('Empty response from API');
-                // Some models leak tool calls into the text content instead of using
-                // tool_calls — recover those too so the action still runs.
+                // Some models leak tool calls as plain text — recover them.
                 if ((!msg.tool_calls || msg.tool_calls.length === 0) && typeof msg.content === 'string') {
                     const loose = extractLooseToolCalls(msg.content);
                     if (loose.length)
@@ -2028,23 +1873,33 @@ async function runOpenAICompatibleLoop(endpoint, apiKey, model, userInput, tabId
                 }
             }
             currentOpenAIConversation.push(msg);
-            // Handle text response
-            if (msg.content && msg.content.trim()) {
-                safeSendMessage(tabId, { type: 'ECHO_SAY', text: msg.content.trim() });
+            if (msg.content && typeof msg.content === 'string' && msg.content.trim()) {
+                safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: msg.content.trim() });
             }
-            // Handle tool calls
             if (msg.tool_calls && msg.tool_calls.length > 0) {
                 const toolResults = [];
                 for (const tc of msg.tool_calls) {
-                    const toolName = tc.function.name;
-                    const toolArgs = JSON.parse(tc.function.arguments || '{}');
-                    safeSendMessage(tabId, { type: 'ECHO_STATE', state: `Executing ${toolName}...` });
+                    const toolName = tc.function?.name;
+                    if (!toolName)
+                        continue;
+                    let toolArgs = {};
+                    try {
+                        toolArgs = JSON.parse(tc.function.arguments || '{}');
+                    }
+                    catch {
+                        toolArgs = {};
+                    }
+                    safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: `Executing ${toolName}...` });
                     let resultContent;
                     try {
-                        const result = await (0,_tools__WEBPACK_IMPORTED_MODULE_3__.executeTool)(toolName, toolArgs, tabId);
+                        const result = await (0,_tools__WEBPACK_IMPORTED_MODULE_3__.executeTool)(toolName, toolArgs, activeTabId);
+                        // Track tab changes so subsequent DOM actions hit the right tab.
+                        if (toolName === 'open_url' && result?.newTabId)
+                            activeTabId = result.newTabId;
+                        if (toolName === 'switch_tab' && toolArgs?.tabId)
+                            activeTabId = Number(toolArgs.tabId);
                         if (toolName === 'screenshot' && result.dataUrl) {
-                            // For screenshot, we just tell the model it was taken (most free models don't support vision)
-                            resultContent = 'Screenshot captured. Note: Image vision may not be available on this model. Use read_screen for text-based analysis.';
+                            resultContent = 'Screenshot captured. Vision not available on this model — use read_screen for text-based analysis.';
                         }
                         else {
                             resultContent = JSON.stringify(result);
@@ -2053,30 +1908,2144 @@ async function runOpenAICompatibleLoop(endpoint, apiKey, model, userInput, tabId
                     catch (e) {
                         resultContent = 'Error: ' + e.message;
                     }
-                    toolResults.push({
-                        role: 'tool',
-                        tool_call_id: tc.id,
-                        content: resultContent
-                    });
+                    toolResults.push({ role: 'tool', tool_call_id: tc.id, content: resultContent });
                 }
-                // Push all tool results back
                 currentOpenAIConversation.push(...toolResults);
             }
             else {
-                // No tool calls — we're done
                 isFinished = true;
-                safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+                safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
             }
         }
     }
     catch (err) {
         if (err.message === 'Aborted by user' || err.name === 'AbortError') {
-            safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+            safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
             return;
         }
-        safeSendMessage(tabId, { type: 'ECHO_SAY', text: 'AI Error: ' + err.message });
-        safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Error' });
+        safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: 'AI Error: ' + err.message });
+        safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Error' });
     }
+}
+
+
+/***/ },
+
+/***/ "./src/background/bus.ts"
+/*!*******************************!*\
+  !*** ./src/background/bus.ts ***!
+  \*******************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   echoUser: () => (/* binding */ echoUser),
+/* harmony export */   pushTranscript: () => (/* binding */ pushTranscript),
+/* harmony export */   resolveActiveTab: () => (/* binding */ resolveActiveTab),
+/* harmony export */   safeSendMessage: () => (/* binding */ safeSendMessage),
+/* harmony export */   say: () => (/* binding */ say),
+/* harmony export */   setState: () => (/* binding */ setState),
+/* harmony export */   suggest: () => (/* binding */ suggest)
+/* harmony export */ });
+// Single choke point for every UI update ECHO emits.
+//
+// Both the cloud brain (brain.ts) and the whole local stack (smart-router,
+// local-brain, watchers…) talk to the user through here, so the orb, the side
+// panel and the persistent transcript can never drift out of sync.
+const TRANSCRIPT_CAP = 200;
+/** Append to the persistent transcript the side panel reads on open. */
+function pushTranscript(entry) {
+    chrome.storage.local.get(['echo_transcript'], (r) => {
+        const t = (r.echo_transcript || []);
+        t.push({ ...entry, ts: Date.now() });
+        chrome.storage.local.set({ echo_transcript: t.slice(-TRANSCRIPT_CAP) });
+    });
+}
+/**
+ * Deliver a message to the content-script orb on `tabId` AND mirror
+ * conversational traffic to extension pages (side panel / popup).
+ * Every send is failure-tolerant: a missing receiver is normal and must never
+ * reject into the caller's control flow.
+ */
+function safeSendMessage(tabId, msg) {
+    if (tabId !== undefined && tabId !== null) {
+        chrome.tabs.sendMessage(tabId, msg).catch(() => { });
+    }
+    if (msg.type === 'ECHO_SAY' || msg.type === 'ECHO_STATE' || msg.type === 'ECHO_USAGE' || msg.type === 'ECHO_SUGGEST') {
+        try {
+            chrome.runtime.sendMessage(msg).catch(() => { });
+        }
+        catch { /* no page open */ }
+    }
+    if (msg.type === 'ECHO_SAY' && typeof msg.text === 'string') {
+        pushTranscript({ role: 'echo', text: msg.text, tier: msg.tier });
+    }
+}
+/** Speak/print a reply. `tier` tags which brain answered (0-3) for the UI badge. */
+function say(tabId, text, tier) {
+    safeSendMessage(tabId, { type: 'ECHO_SAY', text, tier });
+}
+/** Update the orb / panel status line. */
+function setState(tabId, state) {
+    safeSendMessage(tabId, { type: 'ECHO_STATE', state });
+}
+/** Echo the user's own message into the transcript + panel. */
+function echoUser(text) {
+    pushTranscript({ role: 'user', text });
+    try {
+        chrome.runtime.sendMessage({ type: 'ECHO_USER_ECHO', text }).catch(() => { });
+    }
+    catch { /* ignore */ }
+}
+/** Push a proactive, dismissible suggestion (Tier 2 passive observer). */
+function suggest(tabId, text, action) {
+    safeSendMessage(tabId, { type: 'ECHO_SUGGEST', text, action });
+}
+/** Resolve a usable tab id when the request came from the side panel/popup. */
+async function resolveActiveTab(tabId) {
+    if (tabId !== undefined && tabId !== null)
+        return tabId;
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        return tab?.id;
+    }
+    catch {
+        return undefined;
+    }
+}
+
+
+/***/ },
+
+/***/ "./src/background/db.ts"
+/*!******************************!*\
+  !*** ./src/background/db.ts ***!
+  \******************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   STORE_CACHE: () => (/* binding */ STORE_CACHE),
+/* harmony export */   STORE_HIGHLIGHTS: () => (/* binding */ STORE_HIGHLIGHTS),
+/* harmony export */   STORE_KB: () => (/* binding */ STORE_KB),
+/* harmony export */   getDB: () => (/* binding */ getDB),
+/* harmony export */   idbClear: () => (/* binding */ idbClear),
+/* harmony export */   idbCount: () => (/* binding */ idbCount),
+/* harmony export */   idbDelete: () => (/* binding */ idbDelete),
+/* harmony export */   idbGet: () => (/* binding */ idbGet),
+/* harmony export */   idbGetAll: () => (/* binding */ idbGetAll),
+/* harmony export */   idbGetAllByIndex: () => (/* binding */ idbGetAllByIndex),
+/* harmony export */   idbPut: () => (/* binding */ idbPut),
+/* harmony export */   idbTrim: () => (/* binding */ idbTrim)
+/* harmony export */ });
+// Shared IndexedDB for everything ECHO remembers locally:
+//   cache      — past API answers, so an identical question costs nothing
+//   kb         — text of pages you've visited, for offline recall
+//   highlights — text you saved, re-injected when you revisit the page
+//
+// Service workers get killed and restarted constantly, so the connection is
+// lazily (re)opened and every helper resolves rather than throws — a storage
+// failure must degrade ECHO to "no memory", never break the request.
+const DB_NAME = 'echo_db';
+const DB_VERSION = 1;
+const STORE_CACHE = 'cache';
+const STORE_KB = 'kb';
+const STORE_HIGHLIGHTS = 'highlights';
+let dbPromise = null;
+function getDB() {
+    if (dbPromise)
+        return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+        let req;
+        try {
+            req = indexedDB.open(DB_NAME, DB_VERSION);
+        }
+        catch (e) {
+            reject(e);
+            return;
+        }
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(STORE_CACHE)) {
+                const s = db.createObjectStore(STORE_CACHE, { keyPath: 'key' });
+                s.createIndex('expires', 'expires');
+            }
+            if (!db.objectStoreNames.contains(STORE_KB)) {
+                const s = db.createObjectStore(STORE_KB, { keyPath: 'url' });
+                s.createIndex('ts', 'ts');
+                s.createIndex('domain', 'domain');
+            }
+            if (!db.objectStoreNames.contains(STORE_HIGHLIGHTS)) {
+                const s = db.createObjectStore(STORE_HIGHLIGHTS, { keyPath: 'id' });
+                s.createIndex('url', 'url');
+                s.createIndex('ts', 'ts');
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+        // If another tab holds an old version open, don't hang forever.
+        req.onblocked = () => reject(new Error('IndexedDB upgrade blocked'));
+    });
+    // A failed open must not poison every later call.
+    dbPromise.catch(() => { dbPromise = null; });
+    return dbPromise;
+}
+function tx(db, store, mode) {
+    return db.transaction(store, mode).objectStore(store);
+}
+async function idbPut(store, value) {
+    try {
+        const db = await getDB();
+        await new Promise((resolve, reject) => {
+            const r = tx(db, store, 'readwrite').put(value);
+            r.onsuccess = () => resolve();
+            r.onerror = () => reject(r.error);
+        });
+    }
+    catch { /* storage unavailable — feature degrades silently */ }
+}
+async function idbGet(store, key) {
+    try {
+        const db = await getDB();
+        return await new Promise((resolve, reject) => {
+            const r = tx(db, store, 'readonly').get(key);
+            r.onsuccess = () => resolve(r.result ?? null);
+            r.onerror = () => reject(r.error);
+        });
+    }
+    catch {
+        return null;
+    }
+}
+async function idbDelete(store, key) {
+    try {
+        const db = await getDB();
+        await new Promise((resolve, reject) => {
+            const r = tx(db, store, 'readwrite').delete(key);
+            r.onsuccess = () => resolve();
+            r.onerror = () => reject(r.error);
+        });
+    }
+    catch { /* ignore */ }
+}
+async function idbGetAll(store, limit = 1000) {
+    try {
+        const db = await getDB();
+        return await new Promise((resolve, reject) => {
+            const r = tx(db, store, 'readonly').getAll(undefined, limit);
+            r.onsuccess = () => resolve(r.result || []);
+            r.onerror = () => reject(r.error);
+        });
+    }
+    catch {
+        return [];
+    }
+}
+async function idbGetAllByIndex(store, index, key, limit = 500) {
+    try {
+        const db = await getDB();
+        return await new Promise((resolve, reject) => {
+            const r = tx(db, store, 'readonly').index(index).getAll(key, limit);
+            r.onsuccess = () => resolve(r.result || []);
+            r.onerror = () => reject(r.error);
+        });
+    }
+    catch {
+        return [];
+    }
+}
+async function idbClear(store) {
+    try {
+        const db = await getDB();
+        await new Promise((resolve, reject) => {
+            const r = tx(db, store, 'readwrite').clear();
+            r.onsuccess = () => resolve();
+            r.onerror = () => reject(r.error);
+        });
+    }
+    catch { /* ignore */ }
+}
+async function idbCount(store) {
+    try {
+        const db = await getDB();
+        return await new Promise((resolve, reject) => {
+            const r = tx(db, store, 'readonly').count();
+            r.onsuccess = () => resolve(r.result || 0);
+            r.onerror = () => reject(r.error);
+        });
+    }
+    catch {
+        return 0;
+    }
+}
+/**
+ * Keep a store under `max` records by evicting the oldest by `tsField`.
+ * Called opportunistically after writes so the DB can't grow unbounded.
+ */
+async function idbTrim(store, tsField, max) {
+    try {
+        const count = await idbCount(store);
+        if (count <= max)
+            return;
+        const all = await idbGetAll(store, count);
+        all.sort((a, b) => (a[tsField] || 0) - (b[tsField] || 0));
+        const db = await getDB();
+        const victims = all.slice(0, count - max);
+        const objStore = tx(db, store, 'readwrite');
+        const keyPath = String(objStore.keyPath || 'id');
+        for (const v of victims)
+            objStore.delete(v[keyPath]);
+    }
+    catch { /* ignore */ }
+}
+
+
+/***/ },
+
+/***/ "./src/background/highlights.ts"
+/*!**************************************!*\
+  !*** ./src/background/highlights.ts ***!
+  \**************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   allHighlights: () => (/* binding */ allHighlights),
+/* harmony export */   clearHighlights: () => (/* binding */ clearHighlights),
+/* harmony export */   deleteHighlight: () => (/* binding */ deleteHighlight),
+/* harmony export */   exportHighlightsMarkdown: () => (/* binding */ exportHighlightsMarkdown),
+/* harmony export */   highlightsForUrl: () => (/* binding */ highlightsForUrl),
+/* harmony export */   saveHighlight: () => (/* binding */ saveHighlight),
+/* harmony export */   searchHighlights: () => (/* binding */ searchHighlights)
+/* harmony export */ });
+/* harmony import */ var _db__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./db */ "./src/background/db.ts");
+// Tier 1 — highlights & notes.
+//
+// Text you save on any page is stored locally with its URL and context, and
+// re-injected the next time you land on that page. Never touches the network.
+
+const MAX_HIGHLIGHTS = 1000;
+const COLORS = ['#4a90e2', '#22c55e', '#f59e0b', '#ef4444', '#a855f7'];
+function cleanUrl(url) {
+    try {
+        const u = new URL(url);
+        return u.origin + u.pathname;
+    }
+    catch {
+        return url;
+    }
+}
+async function saveHighlight(url, title, text, note, color) {
+    const h = {
+        id: `hl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        url: cleanUrl(url),
+        title: (title || '').substring(0, 200),
+        text: (text || '').replace(/\s+/g, ' ').trim().substring(0, 1200),
+        note: note?.substring(0, 500),
+        color: color || COLORS[Math.floor(Math.random() * COLORS.length)],
+        ts: Date.now(),
+    };
+    await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbPut)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_HIGHLIGHTS, h);
+    return h;
+}
+async function highlightsForUrl(url) {
+    const list = await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGetAllByIndex)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_HIGHLIGHTS, 'url', cleanUrl(url));
+    return list.sort((a, b) => a.ts - b.ts);
+}
+async function allHighlights(limit = MAX_HIGHLIGHTS) {
+    const list = await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGetAll)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_HIGHLIGHTS, limit);
+    return list.sort((a, b) => b.ts - a.ts);
+}
+async function deleteHighlight(id) {
+    await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbDelete)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_HIGHLIGHTS, id);
+}
+async function clearHighlights() {
+    await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbClear)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_HIGHLIGHTS);
+}
+async function searchHighlights(query, limit = 10) {
+    const q = query.toLowerCase().trim();
+    if (!q)
+        return [];
+    const all = await allHighlights();
+    return all
+        .filter(h => h.text.toLowerCase().includes(q)
+        || h.title.toLowerCase().includes(q)
+        || (h.note || '').toLowerCase().includes(q))
+        .slice(0, limit);
+}
+/** Markdown export, grouped by page — pasteable straight into notes apps. */
+async function exportHighlightsMarkdown() {
+    const all = await allHighlights();
+    if (!all.length)
+        return '# ECHO Highlights\n\n_Nothing saved yet._\n';
+    const byUrl = new Map();
+    for (const h of all) {
+        const arr = byUrl.get(h.url) || [];
+        arr.push(h);
+        byUrl.set(h.url, arr);
+    }
+    let md = `# ECHO Highlights\n\n_${all.length} highlights across ${byUrl.size} pages._\n\n`;
+    for (const [url, list] of byUrl) {
+        md += `## ${list[0].title || url}\n<${url}>\n\n`;
+        for (const h of list.sort((a, b) => a.ts - b.ts)) {
+            md += `> ${h.text}\n`;
+            if (h.note)
+                md += `\n**Note:** ${h.note}\n`;
+            md += `\n_${new Date(h.ts).toLocaleString()}_\n\n`;
+        }
+    }
+    return md;
+}
+
+
+/***/ },
+
+/***/ "./src/background/knowledge-base.ts"
+/*!******************************************!*\
+  !*** ./src/background/knowledge-base.ts ***!
+  \******************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   clearKB: () => (/* binding */ clearKB),
+/* harmony export */   forgetPage: () => (/* binding */ forgetPage),
+/* harmony export */   getPage: () => (/* binding */ getPage),
+/* harmony export */   indexPage: () => (/* binding */ indexPage),
+/* harmony export */   isIndexable: () => (/* binding */ isIndexable),
+/* harmony export */   kbSize: () => (/* binding */ kbSize),
+/* harmony export */   pagesToday: () => (/* binding */ pagesToday),
+/* harmony export */   recentPages: () => (/* binding */ recentPages),
+/* harmony export */   searchKB: () => (/* binding */ searchKB)
+/* harmony export */ });
+/* harmony import */ var _db__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./db */ "./src/background/db.ts");
+// Tier 1 — automatic knowledge base.
+//
+// As you browse, the content script quietly hands ECHO the readable text of
+// each page. Later "what was that article about X?" is answered by a local
+// full-text search instead of a web search plus a model call.
+
+const MAX_PAGES = 600;
+const MAX_TEXT = 4000;
+const MIN_TEXT = 220; // ignore near-empty pages
+const REVISIT_MS = 60_000; // don't rewrite the same page in a tight loop
+/** Coarse auto-tags from the URL — enough to filter recall by topic. */
+function autoTags(url, title) {
+    const s = (url + ' ' + title).toLowerCase();
+    const tags = [];
+    const add = (t) => { if (!tags.includes(t))
+        tags.push(t); };
+    if (/github|gitlab|stackoverflow|npm|docs?\.|developer|api|mdn/.test(s))
+        add('dev');
+    if (/news|bbc|cnn|reuters|nytimes|guardian|verge|techcrunch/.test(s))
+        add('news');
+    if (/amazon|ebay|flipkart|shop|store|cart|product|price/.test(s))
+        add('shopping');
+    if (/youtube|netflix|spotify|twitch|vimeo/.test(s))
+        add('media');
+    if (/wikipedia|scholar|arxiv|researchgate|pubmed/.test(s))
+        add('reference');
+    if (/mail|gmail|outlook|inbox/.test(s))
+        add('mail');
+    if (/linkedin|twitter|x\.com|reddit|facebook|instagram/.test(s))
+        add('social');
+    if (/docs\.google|notion|confluence|sheet|slide/.test(s))
+        add('docs');
+    return tags;
+}
+function domainOf(url) {
+    try {
+        return new URL(url).hostname.replace(/^www\./, '');
+    }
+    catch {
+        return '';
+    }
+}
+function cleanUrl(url) {
+    try {
+        const u = new URL(url);
+        return u.origin + u.pathname;
+    }
+    catch {
+        return url;
+    }
+}
+/** Should this page be remembered at all? */
+function isIndexable(url) {
+    if (!url)
+        return false;
+    if (!/^https?:/i.test(url))
+        return false;
+    // Never store anything that looks private or authenticated.
+    if (/\b(login|signin|signup|register|password|checkout|payment|billing|account\/|auth|oauth|token)\b/i.test(url))
+        return false;
+    if (/localhost|127\.0\.0\.1|\.local\b/i.test(url))
+        return false;
+    return true;
+}
+async function indexPage(url, title, text) {
+    if (!isIndexable(url))
+        return false;
+    const body = (text || '').replace(/\s+/g, ' ').trim();
+    if (body.length < MIN_TEXT)
+        return false;
+    const key = cleanUrl(url);
+    const existing = await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGet)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_KB, key);
+    const now = Date.now();
+    if (existing && now - existing.ts < REVISIT_MS)
+        return false;
+    const page = {
+        url: key,
+        domain: domainOf(url),
+        title: (title || key).substring(0, 200),
+        text: body.substring(0, MAX_TEXT),
+        tags: autoTags(url, title || ''),
+        ts: now,
+        visits: (existing?.visits || 0) + 1,
+    };
+    await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbPut)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_KB, page);
+    (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbTrim)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_KB, 'ts', MAX_PAGES);
+    return true;
+}
+/** Rank pages by term hits in title (weighted), text, domain and freshness. */
+async function searchKB(query, limit = 6) {
+    const terms = query.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !STOPWORDS.has(w));
+    if (!terms.length)
+        return [];
+    const pages = await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGetAll)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_KB, MAX_PAGES);
+    const now = Date.now();
+    const scored = [];
+    for (const p of pages) {
+        const title = p.title.toLowerCase();
+        const text = p.text.toLowerCase();
+        let score = 0;
+        let firstHit = -1;
+        for (const t of terms) {
+            if (title.includes(t))
+                score += 6;
+            if (p.domain.includes(t))
+                score += 3;
+            if (p.tags.includes(t))
+                score += 2;
+            const idx = text.indexOf(t);
+            if (idx !== -1) {
+                score += 1;
+                // Repeats matter, but with diminishing returns.
+                score += Math.min(3, (text.split(t).length - 1) * 0.25);
+                if (firstHit === -1)
+                    firstHit = idx;
+            }
+        }
+        if (score <= 0)
+            continue;
+        // Gentle recency boost: last 24 h ranks above last month.
+        const ageDays = (now - p.ts) / 86_400_000;
+        score += Math.max(0, 3 - ageDays * 0.35);
+        const start = Math.max(0, (firstHit === -1 ? 0 : firstHit) - 90);
+        const snippet = p.text.substring(start, start + 240).trim();
+        scored.push({ ...p, score, snippet: (start > 0 ? '…' : '') + snippet + '…' });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit);
+}
+async function recentPages(limit = 10) {
+    const pages = await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGetAll)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_KB, MAX_PAGES);
+    pages.sort((a, b) => b.ts - a.ts);
+    return pages.slice(0, limit);
+}
+/** Pages seen since local midnight — powers "what did I read today?". */
+async function pagesToday() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const pages = await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGetAll)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_KB, MAX_PAGES);
+    return pages.filter(p => p.ts >= start.getTime()).sort((a, b) => b.ts - a.ts);
+}
+async function getPage(url) {
+    return (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGet)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_KB, cleanUrl(url));
+}
+async function forgetPage(url) {
+    await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbDelete)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_KB, cleanUrl(url));
+}
+async function clearKB() {
+    await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbClear)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_KB);
+}
+async function kbSize() {
+    return (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbCount)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_KB);
+}
+const STOPWORDS = new Set([
+    'the', 'and', 'that', 'this', 'with', 'for', 'was', 'were', 'are', 'you', 'your',
+    'what', 'when', 'where', 'which', 'who', 'how', 'about', 'from', 'have', 'has',
+    'had', 'been', 'they', 'them', 'their', 'there', 'here', 'can', 'could', 'would',
+    'should', 'will', 'did', 'does', 'not', 'but', 'all', 'any', 'some', 'read', 'page',
+    'site', 'website', 'article', 'find', 'search', 'show', 'tell',
+]);
+
+
+/***/ },
+
+/***/ "./src/background/local-brain.ts"
+/*!***************************************!*\
+  !*** ./src/background/local-brain.ts ***!
+  \***************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   bumpTier: () => (/* binding */ bumpTier),
+/* harmony export */   handleLocally: () => (/* binding */ handleLocally),
+/* harmony export */   needsCloud: () => (/* binding */ needsCloud),
+/* harmony export */   routerStats: () => (/* binding */ routerStats)
+/* harmony export */ });
+/* harmony import */ var _bus__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./bus */ "./src/background/bus.ts");
+/* harmony import */ var _tools__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./tools */ "./src/background/tools.ts");
+/* harmony import */ var _site_knowledge__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./site-knowledge */ "./src/background/site-knowledge.ts");
+/* harmony import */ var _workflow_engine__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./workflow-engine */ "./src/background/workflow-engine.ts");
+/* harmony import */ var _page_watcher__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./page-watcher */ "./src/background/page-watcher.ts");
+/* harmony import */ var _knowledge_base__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./knowledge-base */ "./src/background/knowledge-base.ts");
+/* harmony import */ var _highlights__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./highlights */ "./src/background/highlights.ts");
+/* harmony import */ var _response_cache__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./response-cache */ "./src/background/response-cache.ts");
+// Tier 0 — the local brain.
+//
+// Runs before any network call. If a request can be satisfied from storage,
+// the DOM, or a known site's structure, it is answered here for free. Anything
+// it can't confidently handle returns null and falls through to the next tier.
+
+
+
+
+
+
+
+
+// --- small helpers ---------------------------------------------------------
+const store = {
+    get: (keys) => chrome.storage.local.get(keys),
+    set: (obj) => chrome.storage.local.set(obj),
+};
+async function memory() {
+    const r = await store.get(['echo_memory']);
+    return (r.echo_memory || {});
+}
+async function tabInfo(tabId) {
+    if (tabId == null)
+        return { url: '', title: '' };
+    try {
+        const t = await chrome.tabs.get(tabId);
+        return { url: t.url || '', title: t.title || '' };
+    }
+    catch {
+        return { url: '', title: '' };
+    }
+}
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+/** Normalise a URL fragment the user spoke ("youtube" -> https://youtube.com). */
+function toUrl(raw) {
+    let s = raw.trim().replace(/[.,!?;]+$/, '').replace(/^["']|["']$/g, '');
+    if (!s)
+        return null;
+    s = s.replace(/\s+dot\s+/gi, '.').replace(/\s+/g, '');
+    if (/^https?:\/\//i.test(s))
+        return s;
+    const site = (0,_site_knowledge__WEBPACK_IMPORTED_MODULE_2__.matchSite)(s);
+    if (site && !s.includes('.'))
+        return site.home;
+    if (/^[\w-]+(\.[\w-]+)+([/?#].*)?$/.test(s))
+        return 'https://' + s;
+    return null;
+}
+// ---------------------------------------------------------------------------
+// Handlers. Each returns the reply text, or null to decline (fall through).
+// Order matters: the first matching rule wins.
+// ---------------------------------------------------------------------------
+const RULES = [];
+const rule = (re, fn) => RULES.push({ re, fn });
+// --- conversation ---
+rule(/^(hi|hey|hello|yo|sup|howdy|hiya|good (morning|afternoon|evening))\b[\s!.]*$/i, async () => pick([
+    "Hey! What can I do for you?",
+    "Hi there — ready when you are.",
+    "Hello! Point me at something.",
+]));
+rule(/^(thanks|thank you|thx|ty|cheers|nice|great|perfect|awesome|cool)\b[\s!.]*$/i, async () => pick(["Anytime.", "Happy to help.", "You got it."]));
+rule(/^(bye|goodbye|see ya|later|good night)\b[\s!.]*$/i, async () => pick(["See you.", "Catch you later.", "Goodnight!"]));
+rule(/\b(who (made|created|built|designed) you|who('?s| is) your (creator|maker|developer)|who are you)\b/i, async () => "I'm ECHO — built by Deepak, my brilliant creator. I run your browser for you: reading pages, clicking, typing, remembering things, and automating whatever you repeat.");
+// Anchored: "help me fill this form" is a real task, not a request for the
+// capability list, so only a bare help request matches here.
+rule(/^(?:help|what can you do|what do you do|show me (?:your )?(?:features|capabilities|commands)|how do you work)\s*\??$/i, async () => [
+    "Here's what I can do — most of it without touching the internet:",
+    "• Read, summarise and answer questions about any page",
+    "• Click, type, scroll and fill forms for you",
+    "• Record a workflow once, then replay it forever ('record a workflow')",
+    "• Watch a page and alert you when it changes ('watch this page')",
+    "• Extract emails, phones, prices, links ('extract emails')",
+    "• Remember facts ('remember my email is…') and recall pages you've read",
+    "• Save highlights and give them back when you revisit",
+    "Ask me anything, or just tell me what to do.",
+].join('\n'));
+// --- abort ---
+rule(/^(stop|cancel|abort|nevermind|never mind|quit|halt)\b[\s!.]*$/i, async () => "Stopped.");
+// --- memory ---
+rule(/\b(remember|note|save|store)\b.{0,20}?\b(that\s+)?my\s+([\w\s]{2,30}?)\s+(?:is|are|=)\s+(.+)$/i, async (m) => {
+    const key = m[3].trim().toLowerCase().replace(/\s+/g, '_');
+    const value = m[4].trim().replace(/[.!]$/, '');
+    const mem = await memory();
+    mem[key] = value;
+    await store.set({ echo_memory: mem });
+    return `Got it — your ${m[3].trim()} is ${value}. I'll remember that.`;
+});
+rule(/^(?:what(?:'s| is)|tell me)\s+my\s+([\w\s]{2,30}?)\s*\??$/i, async (m) => {
+    const want = m[1].trim().toLowerCase().replace(/\s+/g, '_');
+    const mem = await memory();
+    const hit = mem[want]
+        ?? mem[Object.keys(mem).find(k => k.includes(want) || want.includes(k)) || ''];
+    if (hit)
+        return `Your ${m[1].trim()} is ${hit}.`;
+    const keys = Object.keys(mem);
+    return keys.length
+        ? `I don't have your ${m[1].trim()} saved. I do know: ${keys.join(', ')}.`
+        : `I haven't saved anything about you yet. Try "remember my email is you@example.com".`;
+});
+rule(/\b(what do you (remember|know) about me|list (your )?memor(y|ies)|show (my )?memor(y|ies)|everything you remember)\b/i, async () => {
+    const mem = await memory();
+    const entries = Object.entries(mem);
+    if (!entries.length)
+        return "I haven't saved anything about you yet.";
+    return `Here's what I remember:\n${entries.map(([k, v]) => `• ${k.replace(/_/g, ' ')}: ${v}`).join('\n')}`;
+});
+rule(/\b(forget|delete|remove)\b.{0,15}\bmy\s+([\w\s]{2,30}?)\s*$/i, async (m) => {
+    const want = m[2].trim().toLowerCase().replace(/\s+/g, '_');
+    const mem = await memory();
+    const key = mem[want] ? want : Object.keys(mem).find(k => k.includes(want));
+    if (!key)
+        return `I don't have your ${m[2].trim()} saved.`;
+    delete mem[key];
+    await store.set({ echo_memory: mem });
+    return `Forgotten — I no longer have your ${m[2].trim()}.`;
+});
+// --- saved tasks ---
+rule(/\b(list|show|what)\b.{0,12}\b(my )?(saved )?tasks?\b/i, async () => {
+    const r = await store.get(['echo_tasks']);
+    const tasks = (r.echo_tasks || {});
+    const names = Object.keys(tasks);
+    return names.length
+        ? `Saved tasks:\n${names.map(n => `• ${n}`).join('\n')}\nSay "run <name>" to use one.`
+        : `No saved tasks yet. Say "save a task called X that does Y".`;
+});
+// --- workflows ---
+rule(/\b(record|capture|watch me|learn)\b.{0,20}\b(a )?(workflow|macro|steps|what i do|sequence)\b/i, async (_m, ctx) => {
+    if (ctx.tabId == null)
+        return "I need an active tab to record on.";
+    if ((0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.isRecording)())
+        return "I'm already recording. Say \"stop recording and call it <name>\" when you're done.";
+    await (0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.startRecording)(ctx.tabId, ctx.url);
+    return "Recording. Do your steps normally — I'm watching clicks and typing (never passwords). Say \"stop recording and call it <name>\" when you're finished.";
+});
+rule(/\b(stop|finish|end|done)\b.{0,25}\brecording\b(?:.{0,25}?\b(?:call(?:ed)? it|name it|as)\s+["']?([\w\s-]{1,40}?)["']?)?\s*$/i, async (m) => {
+    if (!(0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.isRecording)())
+        return "I'm not recording right now.";
+    const name = (m[2] || `workflow ${Object.keys(await (0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.listWorkflows)()).length + 1}`).trim();
+    const res = await (0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.stopRecording)(name);
+    return res.message;
+});
+rule(/\b(cancel|discard|throw away)\b.{0,15}\brecording\b/i, async () => {
+    if (!(0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.isRecording)())
+        return "I'm not recording right now.";
+    await (0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.cancelRecording)();
+    return "Recording cancelled — nothing saved.";
+});
+rule(/\b(list|show|what)\b.{0,15}\b(my )?(workflows?|macros?)\b/i, async () => {
+    const all = await (0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.listWorkflows)();
+    const list = Object.values(all);
+    return list.length
+        ? `Saved workflows:\n${list.map(w => `• ${w.name} — ${w.steps.length} steps${w.runs ? `, run ${w.runs}×` : ''}`).join('\n')}`
+        : `No workflows yet. Say "record a workflow" and I'll learn one by watching you.`;
+});
+rule(/\b(run|play|replay|execute|do)\b\s+(?:my\s+|the\s+)?(?:workflow\s+)?["']?([\w\s-]{2,40}?)["']?\s*(?:workflow)?\s*$/i, async (m, ctx) => {
+    const name = m[2].trim();
+    const all = await (0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.listWorkflows)();
+    if (!Object.keys(all).length)
+        return null; // no workflows — let a real tier handle it
+    // Only claim this if the name actually resolves to something we have.
+    if (!(0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.findWorkflowKey)(all, name))
+        return null;
+    if (ctx.tabId == null)
+        return "I need an active tab to run a workflow.";
+    (0,_bus__WEBPACK_IMPORTED_MODULE_0__.setState)(ctx.tabId, `Running workflow "${name}"…`);
+    const res = await (0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.playWorkflow)(name, ctx.tabId);
+    return res.message;
+});
+rule(/\b(delete|remove|forget)\b.{0,15}\b(workflow|macro)\b\s*["']?([\w\s-]{2,40}?)["']?\s*$/i, async (m) => (await (0,_workflow_engine__WEBPACK_IMPORTED_MODULE_3__.deleteWorkflow)(m[3].trim()))
+    ? `Deleted workflow "${m[3].trim()}".`
+    : `I don't have a workflow called "${m[3].trim()}".`);
+// --- page watchers ---
+// Deliberately narrow: it must name the page/price/stock being watched, so
+// "watch this YouTube video" is not mistaken for "monitor this page".
+rule(/\b(?:(?:watch|monitor|track)\s+(?:this|the)\s+(?:page|site|price|product|listing|url)|(?:alert|notify|tell|ping)\s+me\s+(?:when|if))\b/i, async (_m, ctx) => {
+    if (!ctx.url || !/^https?:/.test(ctx.url))
+        return null;
+    const q = ctx.input.toLowerCase();
+    let condition = 'changed';
+    let target;
+    const below = q.match(/\b(?:below|under|less than|drops? (?:to|below)|cheaper than)\s*([$£€¥₹]?\s?[\d,.]+)/);
+    const above = q.match(/\b(?:above|over|more than|exceeds?|goes? (?:to|above))\s*([$£€¥₹]?\s?[\d,.]+)/);
+    const says = q.match(/\b(?:says?|contains?|shows?|mentions?)\s+["']?([\w\s]{2,40}?)["']?\s*$/);
+    const gone = q.match(/\b(?:no longer|stops? (?:saying|showing)|disappears?|removes?)\s+["']?([\w\s]{2,40}?)["']?\s*$/);
+    if (below) {
+        condition = 'below';
+        target = below[1].replace(/[^\d.]/g, '');
+    }
+    else if (above) {
+        condition = 'above';
+        target = above[1].replace(/[^\d.]/g, '');
+    }
+    else if (gone) {
+        condition = 'missing';
+        target = gone[1].trim();
+    }
+    else if (says) {
+        condition = 'contains';
+        target = says[1].trim();
+    }
+    // "check every N minutes/hours"
+    let intervalMin = 60;
+    const every = q.match(/\bevery\s+(\d+)\s*(min|minute|hour|hr|day)/);
+    if (every) {
+        const n = parseInt(every[1], 10);
+        intervalMin = /hour|hr/.test(every[2]) ? n * 60 : /day/.test(every[2]) ? n * 1440 : n;
+    }
+    await (0,_page_watcher__WEBPACK_IMPORTED_MODULE_4__.createWatcher)({
+        url: ctx.url,
+        label: ctx.title || ctx.url,
+        condition,
+        target,
+        intervalMin,
+    });
+    const what = condition === 'below' ? `it drops below ${target}` :
+        condition === 'above' ? `it goes above ${target}` :
+            condition === 'contains' ? `it mentions "${target}"` :
+                condition === 'missing' ? `"${target}" disappears` :
+                    'it changes';
+    return `Watching this page — I'll send a desktop notification when ${what}. Checking every ${intervalMin} minutes.`;
+});
+rule(/\b(list|show|what)\b.{0,15}\b(my )?(watchers?|watches|monitors?)\b/i, async () => {
+    const all = Object.values(await (0,_page_watcher__WEBPACK_IMPORTED_MODULE_4__.listWatchers)());
+    return all.length
+        ? `Active watchers:\n${all.map(w => `• ${(0,_page_watcher__WEBPACK_IMPORTED_MODULE_4__.describeWatcher)(w)}`).join('\n')}`
+        : `No page watchers running. Open a page and say "watch this page and tell me when it changes".`;
+});
+rule(/\b(stop|delete|remove|cancel)\b.{0,15}\b(watch(er|ing)?|monitor)\b\s*["']?([\w\s-]{0,40}?)["']?\s*$/i, async (m) => {
+    const which = (m[3] || '').trim();
+    const all = await (0,_page_watcher__WEBPACK_IMPORTED_MODULE_4__.listWatchers)();
+    const list = Object.values(all);
+    if (!list.length)
+        return "There are no watchers running.";
+    if (!which) {
+        await (0,_page_watcher__WEBPACK_IMPORTED_MODULE_4__.clearWatchers)();
+        return `Stopped all ${list.length} watcher${list.length === 1 ? '' : 's'}.`;
+    }
+    return (await (0,_page_watcher__WEBPACK_IMPORTED_MODULE_4__.deleteWatcher)(which)) ? `Stopped watching "${which}".` : `No watcher matching "${which}".`;
+});
+// --- extraction ---
+rule(/\b(extract|find|get|grab|list|show|collect)\b.{0,20}\b(all\s+)?(emails?|e-mails?|phones?|phone numbers?|prices?|links?|urls?|dates?|handles?|images?|headings?)\b/i, async (m, ctx) => {
+    if (ctx.tabId == null)
+        return null;
+    const word = m[3].toLowerCase();
+    const kind = /mail/.test(word) ? 'emails' :
+        /phone/.test(word) ? 'phones' :
+            /price/.test(word) ? 'prices' :
+                /link|url/.test(word) ? 'links' :
+                    /date/.test(word) ? 'dates' :
+                        /handle/.test(word) ? 'handles' :
+                            /image/.test(word) ? 'images' : 'headings';
+    const res = await (0,_tools__WEBPACK_IMPORTED_MODULE_1__.executeTool)('extract_pattern', { kind }, ctx.tabId).catch(() => null);
+    if (!res || !res.items)
+        return null;
+    if (!res.items.length)
+        return `I didn't find any ${kind} on this page.`;
+    const shown = res.items.slice(0, 25);
+    const more = res.count > shown.length ? `\n…and ${res.count - shown.length} more.` : '';
+    return `Found ${res.count} ${kind}:\n${shown.map((i) => `• ${i}`).join('\n')}${more}`;
+});
+// --- form filling ---
+rule(/\b(fill|complete|autofill|auto-fill)\b.{0,20}\b(this |the )?(form|fields?|it)\b/i, async (_m, ctx) => {
+    if (ctx.tabId == null)
+        return null;
+    const mem = await memory();
+    if (!Object.keys(mem).length) {
+        return "I don't have any saved details to fill with. Tell me things like \"remember my email is you@example.com\" first.";
+    }
+    const res = await (0,_tools__WEBPACK_IMPORTED_MODULE_1__.executeTool)('fill_form', { memory: mem }, ctx.tabId).catch(() => null);
+    if (!res)
+        return null;
+    if (!res.filled?.length) {
+        return `I couldn't match any fields on this page to what I know about you (I have: ${Object.keys(mem).join(', ')}).`;
+    }
+    const names = res.filled.map((f) => f.key.replace(/_/g, ' ')).join(', ');
+    const skipped = res.skipped?.length ? ` I left ${res.skipped.length} sensitive field(s) alone.` : '';
+    return `Filled ${res.filled.length} field${res.filled.length === 1 ? '' : 's'}: ${names}.${skipped} Check it before submitting — I won't submit for you.`;
+});
+// --- highlights ---
+rule(/\b(show|list|my|all)\b.{0,15}\bhighlights?\b/i, async (_m, ctx) => {
+    const onPage = ctx.url ? await (0,_highlights__WEBPACK_IMPORTED_MODULE_6__.highlightsForUrl)(ctx.url) : [];
+    if (onPage.length) {
+        return `${onPage.length} highlight${onPage.length === 1 ? '' : 's'} on this page:\n${onPage.map(h => `• ${h.text.slice(0, 120)}`).join('\n')}`;
+    }
+    const all = await (0,_highlights__WEBPACK_IMPORTED_MODULE_6__.allHighlights)(20);
+    return all.length
+        ? `Your latest highlights:\n${all.slice(0, 8).map(h => `• ${h.text.slice(0, 100)} — ${h.title.slice(0, 40)}`).join('\n')}`
+        : `No highlights yet. Select any text on a page and click the ECHO chip that appears.`;
+});
+rule(/\b(export|download)\b.{0,15}\bhighlights?\b/i, async (_m, ctx) => {
+    const md = await (0,_highlights__WEBPACK_IMPORTED_MODULE_6__.exportHighlightsMarkdown)();
+    await (0,_tools__WEBPACK_IMPORTED_MODULE_1__.executeTool)('download_data', { filename: 'echo-highlights.md', content: md }, ctx.tabId).catch(() => null);
+    return "Exported your highlights as echo-highlights.md.";
+});
+rule(/\b(search|find)\b.{0,20}\b(in )?(my )?highlights?\b\s*(?:for\s+)?["']?([\w\s]{2,40})["']?/i, async (m) => {
+    const hits = await (0,_highlights__WEBPACK_IMPORTED_MODULE_6__.searchHighlights)(m[4].trim());
+    return hits.length
+        ? `${hits.length} matching highlight${hits.length === 1 ? '' : 's'}:\n${hits.map(h => `• ${h.text.slice(0, 120)} — ${h.title.slice(0, 40)}`).join('\n')}`
+        : `Nothing in your highlights matches "${m[4].trim()}".`;
+});
+// --- browsing history / knowledge base ---
+rule(/\b(what|which)\b.{0,25}\b(did i|have i)\b.{0,15}\b(read|visit|browse|look at|see)\b.{0,15}\b(today)\b/i, async () => {
+    const pages = await (0,_knowledge_base__WEBPACK_IMPORTED_MODULE_5__.pagesToday)();
+    if (!pages.length)
+        return "I haven't indexed any pages today yet.";
+    return `You've read ${pages.length} page${pages.length === 1 ? '' : 's'} today:\n${pages.slice(0, 12).map(p => `• ${p.title.slice(0, 70)} — ${p.domain}`).join('\n')}`;
+});
+rule(/\b(what|which)\b.{0,30}\b(article|page|site|thing)\b.{0,30}\b(about|on|regarding)\s+["']?([\w\s]{3,50}?)["']?\s*\??$/i, async (m) => {
+    const hits = await (0,_knowledge_base__WEBPACK_IMPORTED_MODULE_5__.searchKB)(m[4].trim());
+    if (!hits.length)
+        return null; // nothing local — let a paid tier try
+    return `From pages you've read:\n${hits.map(h => `• ${h.title.slice(0, 70)}\n  ${h.domain} — ${h.snippet.slice(0, 140)}`).join('\n')}`;
+});
+rule(/\b(recent|last|latest)\b.{0,15}\b(pages?|sites?|articles?)\b.{0,15}\b(i )?(read|visited|browsed)?\b/i, async () => {
+    const pages = await (0,_knowledge_base__WEBPACK_IMPORTED_MODULE_5__.recentPages)(10);
+    return pages.length
+        ? `Recently read:\n${pages.map(p => `• ${p.title.slice(0, 70)} — ${p.domain}`).join('\n')}`
+        : "I haven't indexed any pages yet.";
+});
+// --- navigation (direct, no model needed) ---
+rule(/^(?:open|go to|navigate to|visit|take me to|launch|browse to)\s+(.{2,120}?)\s*$/i, async (m, ctx) => {
+    const raw = m[1].trim();
+    // "open a new tab and search X" is a real task — don't shortcut it.
+    if (/\b(and|then|search|find|look up|type|click|buy|order)\b/i.test(raw))
+        return null;
+    const url = toUrl(raw);
+    if (!url)
+        return null;
+    const res = await (0,_tools__WEBPACK_IMPORTED_MODULE_1__.executeTool)('open_url', { url }, ctx.tabId).catch(() => null);
+    if (!res)
+        return null;
+    const site = (0,_site_knowledge__WEBPACK_IMPORTED_MODULE_2__.matchSite)(url);
+    return `Opened ${site?.name || url}.`;
+});
+// --- site-aware search (zero-token, uses the site's own search URL) ---
+rule(/^(?:search|look up|find|google)\s+(?:for\s+)?(.+?)\s+(?:on|in|at)\s+([\w.]{2,30})\s*$/i, async (m, ctx) => siteSearch(m[2], m[1], ctx));
+rule(/^(?:search|look up|find)\s+([\w.]{2,30})\s+for\s+(.+?)\s*$/i, async (m, ctx) => siteSearch(m[1], m[2], ctx));
+rule(/^(?:google|search(?: the web)?(?: for)?)\s+(.{2,120}?)\s*$/i, async (m, ctx) => siteSearch('google', m[1], ctx));
+async function siteSearch(siteName, query, ctx) {
+    const q = query.trim();
+    // "search this page for X" is a find-on-page request, not a web search.
+    if (/\b(this|the current|current)\s+(page|article|site|tab|document)\b|\bon this page\b/i.test(q))
+        return null;
+    const site = (0,_site_knowledge__WEBPACK_IMPORTED_MODULE_2__.matchSite)(siteName);
+    if (!site)
+        return null;
+    const url = (0,_site_knowledge__WEBPACK_IMPORTED_MODULE_2__.siteSearchUrl)(site, q);
+    if (!url)
+        return null;
+    const res = await (0,_tools__WEBPACK_IMPORTED_MODULE_1__.executeTool)('open_url', { url }, ctx.tabId).catch(() => null);
+    if (!res)
+        return null;
+    return `Searched ${site.name} for "${q}".`;
+}
+// --- site-aware button clicks ---
+rule(/^(?:click|press|hit|tap)\s+(?:the\s+)?([\w\s]{2,30}?)\s*(?:button)?\s*$/i, async (m, ctx) => {
+    if (!ctx.url || ctx.tabId == null)
+        return null;
+    const site = (0,_site_knowledge__WEBPACK_IMPORTED_MODULE_2__.matchSite)(ctx.url);
+    if (!site)
+        return null;
+    const sels = (0,_site_knowledge__WEBPACK_IMPORTED_MODULE_2__.siteActionSelectors)(site, m[1].trim());
+    if (!sels)
+        return null;
+    const res = await (0,_tools__WEBPACK_IMPORTED_MODULE_1__.executeTool)('click_selector', { selectors: sels }, ctx.tabId).catch(() => null);
+    if (!res?.clicked)
+        return null;
+    return `Clicked ${m[1].trim()} on ${site.name}.`;
+});
+// --- tab housekeeping ---
+rule(/\b(how many|list|show|what)\b.{0,15}\btabs?\b.{0,15}\b(open|do i have)?\b/i, async (_m, ctx) => {
+    const res = await (0,_tools__WEBPACK_IMPORTED_MODULE_1__.executeTool)('list_tabs', {}, ctx.tabId).catch(() => null);
+    if (!res?.tabs)
+        return null;
+    const tabs = res.tabs;
+    return `You have ${tabs.length} tabs open:\n${tabs.slice(0, 15).map(t => `• ${t.title || t.url}`).join('\n')}`;
+});
+// --- diagnostics ---
+rule(/\b(cache|usage|stats|how much|savings?|token)\b.{0,25}\b(stats?|status|saved|used|report)\b/i, async () => {
+    const [c, kb, stats] = await Promise.all([(0,_response_cache__WEBPACK_IMPORTED_MODULE_7__.cacheStats)(), (0,_knowledge_base__WEBPACK_IMPORTED_MODULE_5__.kbSize)(), routerStats()]);
+    const total = stats.t0 + stats.t1 + stats.t2 + stats.t3;
+    const localPct = total ? Math.round(((stats.t0 + stats.t1 + stats.t2) / total) * 100) : 0;
+    return [
+        `Handled ${total} request${total === 1 ? '' : 's'} this install:`,
+        `• ${stats.t0} instantly (no AI)`,
+        `• ${stats.t1} from cache`,
+        `• ${stats.t2} by the on-device model`,
+        `• ${stats.t3} by the cloud API`,
+        `That's ${localPct}% handled without spending quota.`,
+        `Cache: ${c.entries} answers stored, ${c.hits} replays. Knowledge base: ${kb} pages.`,
+    ].join('\n');
+});
+rule(/\b(clear|reset|wipe)\b.{0,15}\bcache\b/i, async () => { await (0,_response_cache__WEBPACK_IMPORTED_MODULE_7__.cacheClear)(); return "Response cache cleared."; });
+rule(/\b(what sites?|which sites?)\b.{0,20}\b(do you know|are supported)\b/i, async () => `I know the layout of ${_site_knowledge__WEBPACK_IMPORTED_MODULE_2__.SITE_PROFILES.length} sites well enough to act without any AI: ${_site_knowledge__WEBPACK_IMPORTED_MODULE_2__.SITE_PROFILES.map(s => s.name).join(', ')}.`);
+async function routerStats() {
+    const r = await store.get(['echo_router_stats']);
+    return { t0: 0, t1: 0, t2: 0, t3: 0, ...(r.echo_router_stats || {}) };
+}
+async function bumpTier(tier) {
+    const s = await routerStats();
+    s[`t${tier}`] = (s[`t${tier}`] || 0) + 1;
+    await store.set({ echo_router_stats: s });
+}
+// ---------------------------------------------------------------------------
+// Entry point.
+// ---------------------------------------------------------------------------
+/**
+ * Try to answer entirely locally.
+ * Returns null when nothing matched — the caller escalates to the next tier.
+ */
+async function handleLocally(input, tabId) {
+    const text = input.trim();
+    if (!text)
+        return null;
+    const { url, title } = await tabInfo(tabId);
+    const ctx = { input: text, tabId, url, title };
+    for (const { re, fn } of RULES) {
+        const m = text.match(re);
+        if (!m)
+            continue;
+        try {
+            const reply = await fn(m, ctx);
+            if (reply === null || reply === undefined)
+                continue; // handler declined
+            (0,_bus__WEBPACK_IMPORTED_MODULE_0__.say)(tabId, reply, 0);
+            (0,_bus__WEBPACK_IMPORTED_MODULE_0__.setState)(tabId, 'Idle');
+            await bumpTier(0);
+            return { handled: true, reply };
+        }
+        catch (e) {
+            // A broken local handler must never swallow the request — fall through
+            // and let a higher tier answer it properly.
+            console.warn('[ECHO] local handler failed:', e?.message || e);
+            continue;
+        }
+    }
+    return null;
+}
+/** Does this request obviously need the cloud? Used to skip cheaper tiers. */
+function needsCloud(input) {
+    return /\b(write|compose|draft|email to|reply to|translate|rewrite|improve|generate|create a|plan|compare|book|order|buy|apply|fill out and submit)\b/i.test(input);
+}
+
+
+/***/ },
+
+/***/ "./src/background/local-llm.ts"
+/*!*************************************!*\
+  !*** ./src/background/local-llm.ts ***!
+  \*************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   activeEngine: () => (/* binding */ activeEngine),
+/* harmony export */   bestPassages: () => (/* binding */ bestPassages),
+/* harmony export */   chromeAiAvailable: () => (/* binding */ chromeAiAvailable),
+/* harmony export */   extractiveSummary: () => (/* binding */ extractiveSummary),
+/* harmony export */   localAsk: () => (/* binding */ localAsk),
+/* harmony export */   localSummarize: () => (/* binding */ localSummarize),
+/* harmony export */   localSynthesize: () => (/* binding */ localSynthesize),
+/* harmony export */   resetLocalLlm: () => (/* binding */ resetLocalLlm)
+/* harmony export */ });
+// Tier 2 — on-device language work. No network, no quota.
+//
+// Two engines, tried in order:
+//   1. Chrome's built-in AI (Gemini Nano) via the Summarizer / LanguageModel
+//      globals. Runs on the user's own hardware. Present on Chrome 138+ with
+//      supported hardware; absent everywhere else, so it is feature-detected
+//      and never assumed.
+//   2. A pure-JS extractive summariser + keyword answerer. Always available,
+//      zero dependencies. Guarantees Tier 2 can answer *something* rather than
+//      falling through to the paid tier.
+let summarizerSession = null;
+let promptSession = null;
+let chromeAiChecked = false;
+let chromeAiUsable = false;
+/** Is Chrome's built-in model present and ready (or downloadable)? */
+async function chromeAiAvailable() {
+    if (chromeAiChecked)
+        return chromeAiUsable;
+    chromeAiChecked = true;
+    chromeAiUsable = false;
+    try {
+        if (typeof Summarizer !== 'undefined' && Summarizer?.availability) {
+            const a = await Summarizer.availability();
+            if (a === 'available' || a === 'downloadable' || a === 'downloading')
+                chromeAiUsable = true;
+        }
+        if (!chromeAiUsable && typeof LanguageModel !== 'undefined' && LanguageModel?.availability) {
+            const a = await LanguageModel.availability();
+            if (a === 'available' || a === 'downloadable' || a === 'downloading')
+                chromeAiUsable = true;
+        }
+    }
+    catch {
+        chromeAiUsable = false;
+    }
+    return chromeAiUsable;
+}
+/** Which engine will actually serve a request right now. */
+async function activeEngine() {
+    return (await chromeAiAvailable()) ? 'chrome-ai' : 'extractive';
+}
+async function getSummarizer() {
+    if (summarizerSession)
+        return summarizerSession;
+    try {
+        if (typeof Summarizer === 'undefined' || !Summarizer?.create)
+            return null;
+        const a = await Summarizer.availability();
+        if (a === 'unavailable')
+            return null;
+        summarizerSession = await Summarizer.create({
+            type: 'key-points',
+            format: 'plain-text',
+            length: 'short',
+        });
+        return summarizerSession;
+    }
+    catch {
+        summarizerSession = null;
+        return null;
+    }
+}
+async function getPromptSession() {
+    if (promptSession)
+        return promptSession;
+    try {
+        if (typeof LanguageModel === 'undefined' || !LanguageModel?.create)
+            return null;
+        const a = await LanguageModel.availability();
+        if (a === 'unavailable')
+            return null;
+        promptSession = await LanguageModel.create({
+            initialPrompts: [{
+                    role: 'system',
+                    content: 'You are ECHO, a concise browser assistant. Answer in 1-3 short sentences using only the provided page text. If the text does not contain the answer, say so plainly.',
+                }],
+        });
+        return promptSession;
+    }
+    catch {
+        promptSession = null;
+        return null;
+    }
+}
+/** Drop cached sessions (e.g. after an error) so the next call rebuilds them. */
+function resetLocalLlm() {
+    try {
+        summarizerSession?.destroy?.();
+    }
+    catch { /* ignore */ }
+    try {
+        promptSession?.destroy?.();
+    }
+    catch { /* ignore */ }
+    summarizerSession = null;
+    promptSession = null;
+    chromeAiChecked = false;
+}
+const MAX_INPUT = 12_000;
+/** Summarise page text on-device. Never rejects — worst case is extractive. */
+async function localSummarize(text, title) {
+    const body = (text || '').replace(/\s+/g, ' ').trim();
+    if (body.length < 200) {
+        return { text: body || 'There is not enough readable text on this page to summarise.', engine: 'extractive' };
+    }
+    const clipped = body.slice(0, MAX_INPUT);
+    const s = await getSummarizer();
+    if (s) {
+        try {
+            const out = await s.summarize(clipped, {
+                context: title ? `The page is titled "${title}".` : undefined,
+            });
+            if (out && String(out).trim().length > 30) {
+                return { text: String(out).trim(), engine: 'chrome-ai' };
+            }
+        }
+        catch {
+            resetLocalLlm(); // session died; fall through to extractive
+        }
+    }
+    return { text: extractiveSummary(clipped, title), engine: 'extractive' };
+}
+/** Answer a question strictly from supplied page text, on-device. */
+async function localAsk(question, context, title) {
+    const body = (context || '').replace(/\s+/g, ' ').trim();
+    if (body.length < 150)
+        return null;
+    const clipped = body.slice(0, MAX_INPUT);
+    const p = await getPromptSession();
+    if (p) {
+        try {
+            const out = await p.prompt(`Page${title ? ` "${title}"` : ''} content:\n"""\n${clipped}\n"""\n\nQuestion: ${question}`);
+            const t = String(out || '').trim();
+            if (t.length > 2)
+                return { text: t, engine: 'chrome-ai' };
+        }
+        catch {
+            resetLocalLlm();
+        }
+    }
+    // Extractive fallback: return the passages that best match the question.
+    const passages = bestPassages(question, clipped, 3);
+    if (!passages.length)
+        return null;
+    return {
+        text: `From the page:\n\n${passages.map(s => `• ${s}`).join('\n')}`,
+        engine: 'extractive',
+    };
+}
+// ---------------------------------------------------------------------------
+// Pure-JS extractive engine — the always-available floor.
+// Classic frequency-based sentence scoring: rank sentences by the weight of
+// the words they contain, then emit the best few in original document order so
+// the result still reads like prose.
+// ---------------------------------------------------------------------------
+const STOP = new Set([
+    'the', 'and', 'that', 'this', 'with', 'for', 'was', 'were', 'are', 'you', 'your', 'from',
+    'have', 'has', 'had', 'been', 'they', 'them', 'their', 'there', 'here', 'can', 'could',
+    'would', 'should', 'will', 'did', 'does', 'not', 'but', 'all', 'any', 'some', 'its', 'it',
+    'a', 'an', 'of', 'to', 'in', 'on', 'is', 'as', 'at', 'by', 'or', 'be', 'we', 'our', 'if',
+    'about', 'into', 'more', 'than', 'then', 'when', 'what', 'which', 'who', 'how', 'also',
+    'may', 'many', 'most', 'such', 'other', 'these', 'those', 'his', 'her', 'she', 'he',
+]);
+// Explicit, visible delimiter — never appears in real page text.
+const SENT_DELIM = '<<|ECHO_SENT|>>';
+function splitSentences(text) {
+    // Break after . ! ? only when the next token really starts a new sentence,
+    // so "v1.5" and "Inc." don't shatter into fragments.
+    return text
+        .replace(/([.!?])\s+(?=["'(]?[A-Z0-9])/g, '$1' + SENT_DELIM)
+        .split(SENT_DELIM)
+        .map(s => s.trim())
+        .filter(s => s.length >= 40 && s.length <= 400);
+}
+function wordFreq(text) {
+    const freq = new Map();
+    const words = text.toLowerCase().match(/[a-z][a-z'-]{2,}/g) || [];
+    for (const w of words) {
+        if (STOP.has(w))
+            continue;
+        freq.set(w, (freq.get(w) || 0) + 1);
+    }
+    return freq;
+}
+function extractiveSummary(text, title, maxSentences = 5) {
+    const sentences = splitSentences(text);
+    if (sentences.length <= maxSentences) {
+        return sentences.join(' ') || text.slice(0, 500);
+    }
+    const freq = wordFreq(text);
+    let peak = 0;
+    freq.forEach(v => { if (v > peak)
+        peak = v; });
+    const titleWords = new Set((title || '').toLowerCase().match(/[a-z][a-z'-]{2,}/g) || []);
+    const scored = sentences.map((s, i) => {
+        const words = s.toLowerCase().match(/[a-z][a-z'-]{2,}/g) || [];
+        if (!words.length)
+            return { s, i, score: 0 };
+        let score = 0;
+        for (const w of words) {
+            if (STOP.has(w))
+                continue;
+            score += (freq.get(w) || 0) / peak;
+            if (titleWords.has(w))
+                score += 0.4; // on-topic with the page title
+        }
+        score /= Math.sqrt(words.length); // don't just reward long sentences
+        if (i < sentences.length * 0.2)
+            score *= 1.15; // openers carry the thesis
+        return { s, i, score };
+    });
+    const top = scored
+        .sort((a, b) => b.score - a.score)
+        .slice(0, maxSentences)
+        .sort((a, b) => a.i - b.i) // restore reading order
+        .map(x => x.s);
+    return top.join(' ');
+}
+/** The sentences most relevant to a question — extractive Q&A. */
+function bestPassages(question, text, n = 3) {
+    const qWords = (question.toLowerCase().match(/[a-z][a-z'-]{2,}/g) || []).filter(w => !STOP.has(w));
+    if (!qWords.length)
+        return [];
+    const sentences = splitSentences(text);
+    const scored = sentences.map(s => {
+        const low = s.toLowerCase();
+        let score = 0;
+        for (const w of qWords)
+            if (low.includes(w))
+                score += 1;
+        return { s, score };
+    }).filter(x => x.score > 0);
+    scored.sort((a, b) => b.score - a.score);
+    // Require at least a third of the question's terms to appear.
+    const threshold = Math.max(1, Math.ceil(qWords.length / 3));
+    return scored.filter(x => x.score >= threshold).slice(0, n).map(x => x.s);
+}
+/** Merge several pages into one readable brief — powers Research Mode. */
+async function localSynthesize(docs) {
+    if (!docs.length)
+        return { text: 'No pages to work with.', engine: 'extractive' };
+    const parts = [];
+    let engine = 'extractive';
+    for (const d of docs) {
+        const sum = await localSummarize(d.text, d.title);
+        if (sum.engine === 'chrome-ai')
+            engine = 'chrome-ai';
+        parts.push(`**${d.title || d.url}**\n${sum.text}`);
+    }
+    return { text: parts.join('\n\n'), engine };
+}
+
+
+/***/ },
+
+/***/ "./src/background/page-watcher.ts"
+/*!****************************************!*\
+  !*** ./src/background/page-watcher.ts ***!
+  \****************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   WATCH_ALARM_PREFIX: () => (/* binding */ WATCH_ALARM_PREFIX),
+/* harmony export */   clearWatchers: () => (/* binding */ clearWatchers),
+/* harmony export */   createWatcher: () => (/* binding */ createWatcher),
+/* harmony export */   deleteWatcher: () => (/* binding */ deleteWatcher),
+/* harmony export */   describeWatcher: () => (/* binding */ describeWatcher),
+/* harmony export */   evaluate: () => (/* binding */ evaluate),
+/* harmony export */   listWatchers: () => (/* binding */ listWatchers),
+/* harmony export */   rehydrateWatchers: () => (/* binding */ rehydrateWatchers),
+/* harmony export */   runWatcherCheck: () => (/* binding */ runWatcherCheck)
+/* harmony export */ });
+// Tier 0 — page watchers.
+//
+// "Tell me when this drops below $800." A watcher stores a URL plus a text
+// pattern, re-checks it on a chrome.alarms schedule in a background tab, and
+// fires a desktop notification when the condition flips. Zero API cost, runs
+// forever.
+const WATCH_ALARM_PREFIX = 'echo_watch_';
+async function listWatchers() {
+    const r = await chrome.storage.local.get(['echo_watchers']);
+    return (r.echo_watchers || {});
+}
+async function saveWatchers(w) {
+    await chrome.storage.local.set({ echo_watchers: w });
+}
+async function createWatcher(opts) {
+    const id = `${WATCH_ALARM_PREFIX}${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    // Chrome refuses alarm periods under 1 minute; 30 is a sane floor for polling.
+    const intervalMin = Math.max(30, Math.min(opts.intervalMin || 60, 1440));
+    const w = {
+        id,
+        url: opts.url,
+        label: opts.label || opts.url,
+        selector: opts.selector,
+        condition: opts.condition,
+        target: opts.target,
+        intervalMin,
+        created: Date.now(),
+        checks: 0,
+        triggered: false,
+    };
+    const all = await listWatchers();
+    all[id] = w;
+    await saveWatchers(all);
+    chrome.alarms.create(id, { delayInMinutes: intervalMin, periodInMinutes: intervalMin });
+    // Seed lastValue immediately so "changed" has a baseline to compare against.
+    captureBaseline(w).catch(() => { });
+    return w;
+}
+async function deleteWatcher(idOrLabel) {
+    const all = await listWatchers();
+    const key = all[idOrLabel]
+        ? idOrLabel
+        : Object.keys(all).find(k => all[k].label.toLowerCase().includes(idOrLabel.toLowerCase()));
+    if (!key)
+        return false;
+    delete all[key];
+    await saveWatchers(all);
+    await chrome.alarms.clear(key);
+    return true;
+}
+async function clearWatchers() {
+    const all = await listWatchers();
+    for (const id of Object.keys(all))
+        await chrome.alarms.clear(id);
+    await chrome.storage.local.set({ echo_watchers: {} });
+}
+async function captureBaseline(w) {
+    const value = await readValue(w);
+    if (value === null)
+        return;
+    const all = await listWatchers();
+    if (!all[w.id])
+        return;
+    all[w.id].lastValue = value;
+    await saveWatchers(all);
+}
+/** Open the page in a background tab, read the value, close the tab. */
+async function readValue(w) {
+    let tab = null;
+    try {
+        tab = await chrome.tabs.create({ url: w.url, active: false });
+        await waitForLoad(tab.id);
+        // Content scripts run at document_end; give React-y pages a beat to paint.
+        await sleep(1200);
+        const res = await chrome.tabs.sendMessage(tab.id, {
+            type: 'DOM_ACTION', action: 'read_value', args: { selector: w.selector },
+        });
+        if (res?.success && typeof res.result?.value === 'string')
+            return res.result.value;
+        return null;
+    }
+    catch {
+        return null;
+    }
+    finally {
+        if (tab?.id)
+            chrome.tabs.remove(tab.id).catch(() => { });
+    }
+}
+function firstNumber(s) {
+    const m = s.replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+    return m ? parseFloat(m[0]) : null;
+}
+/** Evaluate a watcher's condition against a freshly read value. */
+function evaluate(w, value) {
+    const prev = w.lastValue ?? '';
+    switch (w.condition) {
+        case 'changed':
+            return { hit: prev !== '' && value !== prev, detail: `was "${truncate(prev)}", now "${truncate(value)}"` };
+        case 'below': {
+            const n = firstNumber(value), t = firstNumber(w.target || '');
+            if (n === null || t === null)
+                return { hit: false, detail: 'no number found' };
+            return { hit: n < t, detail: `${n} is below ${t}` };
+        }
+        case 'above': {
+            const n = firstNumber(value), t = firstNumber(w.target || '');
+            if (n === null || t === null)
+                return { hit: false, detail: 'no number found' };
+            return { hit: n > t, detail: `${n} is above ${t}` };
+        }
+        case 'contains': {
+            const needle = (w.target || '').toLowerCase();
+            return { hit: !!needle && value.toLowerCase().includes(needle), detail: `found "${w.target}"` };
+        }
+        case 'missing': {
+            const needle = (w.target || '').toLowerCase();
+            return { hit: !!needle && !value.toLowerCase().includes(needle), detail: `"${w.target}" is gone` };
+        }
+        default:
+            return { hit: false, detail: '' };
+    }
+}
+const NOTIF_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+/** Called from the alarm handler. Returns true if the watcher fired. */
+async function runWatcherCheck(id) {
+    const all = await listWatchers();
+    const w = all[id];
+    if (!w) {
+        await chrome.alarms.clear(id);
+        return false;
+    }
+    const value = await readValue(w);
+    w.checks++;
+    if (value === null) {
+        all[id] = w;
+        await saveWatchers(all);
+        return false;
+    }
+    const { hit, detail } = evaluate(w, value);
+    const prevValue = w.lastValue;
+    w.lastValue = value;
+    if (hit && !w.triggered) {
+        w.triggered = true;
+        all[id] = w;
+        await saveWatchers(all);
+        chrome.notifications.create(id, {
+            type: 'basic',
+            iconUrl: NOTIF_ICON,
+            title: `ECHO: ${w.label}`,
+            message: `${detail}\nClick to open the page.`,
+            priority: 2,
+        });
+        return true;
+    }
+    // Re-arm once the condition relaxes, so a watcher can fire again later.
+    if (!hit && w.triggered && prevValue !== value)
+        w.triggered = false;
+    all[id] = w;
+    await saveWatchers(all);
+    return false;
+}
+/** Rebuild alarms after a browser restart (service worker loses them). */
+async function rehydrateWatchers() {
+    const all = await listWatchers();
+    for (const w of Object.values(all)) {
+        const existing = await chrome.alarms.get(w.id);
+        if (!existing) {
+            chrome.alarms.create(w.id, { delayInMinutes: w.intervalMin, periodInMinutes: w.intervalMin });
+        }
+    }
+}
+function describeWatcher(w) {
+    const cond = w.condition === 'changed' ? 'changes'
+        : w.condition === 'below' ? `drops below ${w.target}`
+            : w.condition === 'above' ? `goes above ${w.target}`
+                : w.condition === 'contains' ? `contains "${w.target}"`
+                    : `no longer contains "${w.target}"`;
+    return `${w.label} — alerts when it ${cond}, checked every ${w.intervalMin} min${w.lastValue ? ` (last: ${truncate(w.lastValue)})` : ''}`;
+}
+function truncate(s, n = 40) {
+    const t = (s || '').replace(/\s+/g, ' ').trim();
+    return t.length > n ? t.slice(0, n) + '…' : t;
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function waitForLoad(tabId, timeout = 12000) {
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const poll = () => {
+            chrome.tabs.get(tabId, (tab) => {
+                if (chrome.runtime.lastError || !tab || tab.status === 'complete')
+                    return resolve();
+                if (Date.now() - start > timeout)
+                    return resolve();
+                setTimeout(poll, 300);
+            });
+        };
+        setTimeout(poll, 700);
+    });
+}
+
+
+/***/ },
+
+/***/ "./src/background/response-cache.ts"
+/*!******************************************!*\
+  !*** ./src/background/response-cache.ts ***!
+  \******************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   cacheClear: () => (/* binding */ cacheClear),
+/* harmony export */   cacheForget: () => (/* binding */ cacheForget),
+/* harmony export */   cacheLookup: () => (/* binding */ cacheLookup),
+/* harmony export */   cachePrune: () => (/* binding */ cachePrune),
+/* harmony export */   cacheStats: () => (/* binding */ cacheStats),
+/* harmony export */   cacheStore: () => (/* binding */ cacheStore),
+/* harmony export */   normalizeQuery: () => (/* binding */ normalizeQuery),
+/* harmony export */   ttlFor: () => (/* binding */ ttlFor)
+/* harmony export */ });
+/* harmony import */ var _db__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./db */ "./src/background/db.ts");
+// Tier 1 — response cache.
+//
+// Every cloud answer is stored keyed by (page URL + normalised question).
+// Asking the same thing again, or something close enough to it, replays the
+// stored answer for free instead of spending quota on an identical round-trip.
+
+const MAX_ENTRIES = 400;
+/** How long an answer stays valid, by the kind of question it was. */
+function ttlFor(query) {
+    const MIN = 60_000;
+    const q = query.toLowerCase();
+    // Page-derived answers go stale as the page changes.
+    if (/summar|what.*(this|page)|tldr|key point|main point|explain this/.test(q))
+        return 15 * MIN;
+    // Anything time-sensitive should barely cache at all.
+    if (/price|stock|score|weather|news|today|now|latest|current/.test(q))
+        return 3 * MIN;
+    // Stable factual/how-to answers.
+    return 24 * 60 * MIN;
+}
+/** Strip filler so "can you summarize this page please" == "summarize page". */
+function normalizeQuery(q) {
+    return q
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\b(please|can you|could you|would you|hey|hi|echo|for me|now|just|kindly|pls|plz)\b/g, ' ')
+        .replace(/\b(the|a|an|of|to|is|are|was|were|this|that|it|and|or|my|me|i)\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+/** Cache scope: page-specific questions key on the URL, general ones don't. */
+function isPageScoped(query) {
+    return /\b(this|page|here|article|site|screen|tab)\b/.test(query.toLowerCase());
+}
+function makeKey(url, normalized) {
+    const scope = isPageScoped(normalized) ? stripUrl(url) : '*';
+    return `${scope}::${normalized}`;
+}
+function stripUrl(url) {
+    try {
+        const u = new URL(url);
+        return u.origin + u.pathname; // ignore query/hash noise
+    }
+    catch {
+        return url || '*';
+    }
+}
+/** Word-overlap similarity, 0..1. */
+function similarity(a, b) {
+    const A = new Set(a.split(' ').filter(Boolean));
+    const B = new Set(b.split(' ').filter(Boolean));
+    if (!A.size || !B.size)
+        return 0;
+    let shared = 0;
+    A.forEach(w => { if (B.has(w))
+        shared++; });
+    return shared / Math.max(A.size, B.size);
+}
+/** Look for a still-valid answer to this question. */
+async function cacheLookup(query, url) {
+    const norm = normalizeQuery(query);
+    if (!norm)
+        return null;
+    const now = Date.now();
+    const exact = await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGet)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE, makeKey(url, norm));
+    if (exact && exact.expires > now) {
+        exact.hits = (exact.hits || 0) + 1;
+        (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbPut)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE, exact);
+        return { answer: exact.answer, exact: true, ageMs: now - exact.ts };
+    }
+    // Near-miss: same page, ≥72 % word overlap. Tight enough to avoid answering
+    // a different question, loose enough to absorb rephrasing.
+    const scope = isPageScoped(norm) ? stripUrl(url) : '*';
+    const all = await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGetAll)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE, MAX_ENTRIES);
+    let best = null;
+    let bestScore = 0;
+    for (const e of all) {
+        if (e.expires <= now)
+            continue;
+        if (!e.key.startsWith(scope + '::'))
+            continue;
+        const score = similarity(norm, e.query);
+        if (score > bestScore) {
+            bestScore = score;
+            best = e;
+        }
+    }
+    if (best && bestScore >= 0.72) {
+        best.hits = (best.hits || 0) + 1;
+        (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbPut)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE, best);
+        return { answer: best.answer, exact: false, ageMs: now - best.ts };
+    }
+    return null;
+}
+/** Store an answer produced by a paid tier. */
+async function cacheStore(query, url, answer) {
+    const norm = normalizeQuery(query);
+    if (!norm || !answer || answer.length < 8)
+        return;
+    // Errors and refusals must never be replayed as if they were answers.
+    if (/^(ai |claude |gemini |auth\/init |api )?error/i.test(answer.trim()))
+        return;
+    const now = Date.now();
+    const entry = {
+        key: makeKey(url, norm),
+        url: stripUrl(url),
+        query: norm,
+        raw: query,
+        answer,
+        ts: now,
+        expires: now + ttlFor(query),
+        hits: 0,
+    };
+    await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbPut)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE, entry);
+    (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbTrim)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE, 'ts', MAX_ENTRIES);
+}
+async function cacheClear() {
+    await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbClear)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE);
+}
+async function cacheForget(url, query) {
+    await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbDelete)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE, makeKey(url, normalizeQuery(query)));
+}
+/** Drop everything expired. Cheap housekeeping, safe to call any time. */
+async function cachePrune() {
+    const now = Date.now();
+    const all = await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGetAll)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE, 2000);
+    let n = 0;
+    for (const e of all) {
+        if (e.expires <= now) {
+            await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbDelete)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE, e.key);
+            n++;
+        }
+    }
+    return n;
+}
+async function cacheStats() {
+    const all = await (0,_db__WEBPACK_IMPORTED_MODULE_0__.idbGetAll)(_db__WEBPACK_IMPORTED_MODULE_0__.STORE_CACHE, 2000);
+    return { entries: all.length, hits: all.reduce((s, e) => s + (e.hits || 0), 0) };
+}
+
+
+/***/ },
+
+/***/ "./src/background/site-knowledge.ts"
+/*!******************************************!*\
+  !*** ./src/background/site-knowledge.ts ***!
+  \******************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   SITE_PROFILES: () => (/* binding */ SITE_PROFILES),
+/* harmony export */   matchSite: () => (/* binding */ matchSite),
+/* harmony export */   siteActionSelectors: () => (/* binding */ siteActionSelectors),
+/* harmony export */   siteSearchUrl: () => (/* binding */ siteSearchUrl)
+/* harmony export */ });
+// Site Intelligence — pre-learned DOM knowledge for popular sites.
+//
+// When ECHO recognises the site it's on (or the site a request names) it can
+// act directly through a known selector instead of paying for read_screen +
+// a model round-trip. "Search YouTube for lo-fi" becomes a plain DOM write.
+const SITE_PROFILES = [
+    {
+        id: 'google', name: 'Google', match: ['google.com', 'google.co'],
+        home: 'https://www.google.com',
+        search: ['textarea[name="q"]', 'input[name="q"]'],
+        searchUrl: q => `https://www.google.com/search?q=${encodeURIComponent(q)}`,
+    },
+    {
+        id: 'youtube', name: 'YouTube', match: ['youtube.com', 'youtu.be'],
+        home: 'https://www.youtube.com',
+        search: ['input#search', 'input[name="search_query"]'],
+        searchUrl: q => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
+        actions: {
+            subscribe: ['#subscribe-button button', 'ytd-subscribe-button-renderer button'],
+            like: ['#top-level-buttons-computed button[aria-label*="like" i]'],
+            fullscreen: ['.ytp-fullscreen-button'],
+            play: ['.ytp-play-button'],
+        },
+    },
+    {
+        id: 'gmail', name: 'Gmail', match: ['mail.google.com'],
+        home: 'https://mail.google.com',
+        search: ['input[aria-label="Search mail"]', 'input[name="q"]'],
+        actions: {
+            compose: ['div[gh="cm"]', 'div[role="button"][gh="cm"]'],
+            reply: ['div[aria-label^="Reply" i]'],
+            archive: ['div[aria-label^="Archive" i]'],
+            send: ['div[role="button"][aria-label^="Send" i]'],
+        },
+    },
+    {
+        id: 'github', name: 'GitHub', match: ['github.com'],
+        home: 'https://github.com',
+        search: ['input[name="q"]', 'button[aria-label*="search" i]'],
+        searchUrl: q => `https://github.com/search?q=${encodeURIComponent(q)}`,
+        actions: {
+            star: ['button[aria-label*="Star" i]', 'form.js-social-form button'],
+            issues: ['a#issues-tab', 'a[data-tab-item="i1issues-tab"]'],
+            pulls: ['a#pull-requests-tab'],
+            code: ['a#code-tab'],
+        },
+    },
+    {
+        id: 'amazon', name: 'Amazon', match: ['amazon.com', 'amazon.in', 'amazon.co'],
+        home: 'https://www.amazon.com',
+        search: ['input#twotabsearchtextbox', 'input[name="field-keywords"]'],
+        searchUrl: q => `https://www.amazon.com/s?k=${encodeURIComponent(q)}`,
+        actions: {
+            cart: ['a#nav-cart', '#nav-cart-count-container'],
+            'add to cart': ['input#add-to-cart-button', '#add-to-cart-button'],
+            buy: ['input#buy-now-button'],
+        },
+    },
+    {
+        id: 'twitter', name: 'X (Twitter)', match: ['twitter.com', 'x.com'],
+        home: 'https://x.com',
+        search: ['input[data-testid="SearchBox_Search_Input"]'],
+        searchUrl: q => `https://x.com/search?q=${encodeURIComponent(q)}`,
+        actions: {
+            post: ['a[data-testid="SideNav_NewTweet_Button"]', 'div[data-testid="tweetButtonInline"]'],
+            like: ['div[data-testid="like"]'],
+            repost: ['div[data-testid="retweet"]'],
+        },
+    },
+    {
+        id: 'reddit', name: 'Reddit', match: ['reddit.com'],
+        home: 'https://www.reddit.com',
+        search: ['input[name="q"]', 'faceplate-search-input input'],
+        searchUrl: q => `https://www.reddit.com/search/?q=${encodeURIComponent(q)}`,
+        actions: {
+            upvote: ['button[aria-label="upvote" i]'],
+            comment: ['button[aria-label*="comment" i]'],
+        },
+    },
+    {
+        id: 'wikipedia', name: 'Wikipedia', match: ['wikipedia.org'],
+        home: 'https://www.wikipedia.org',
+        search: ['input#searchInput', 'input[name="search"]'],
+        searchUrl: q => `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(q)}`,
+    },
+    {
+        id: 'linkedin', name: 'LinkedIn', match: ['linkedin.com'],
+        home: 'https://www.linkedin.com',
+        search: ['input.search-global-typeahead__input', 'input[placeholder="Search"]'],
+        searchUrl: q => `https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(q)}`,
+    },
+    {
+        id: 'stackoverflow', name: 'Stack Overflow', match: ['stackoverflow.com', 'stackexchange.com'],
+        home: 'https://stackoverflow.com',
+        search: ['input[name="q"]'],
+        searchUrl: q => `https://stackoverflow.com/search?q=${encodeURIComponent(q)}`,
+    },
+    {
+        id: 'chatgpt', name: 'ChatGPT', match: ['chatgpt.com', 'chat.openai.com'],
+        home: 'https://chatgpt.com',
+        search: ['#prompt-textarea', 'textarea[data-id]'],
+    },
+    {
+        id: 'netflix', name: 'Netflix', match: ['netflix.com'],
+        home: 'https://www.netflix.com',
+        search: ['input[data-uia="search-box-input"]'],
+        searchUrl: q => `https://www.netflix.com/search?q=${encodeURIComponent(q)}`,
+    },
+    {
+        id: 'spotify', name: 'Spotify', match: ['spotify.com'],
+        home: 'https://open.spotify.com',
+        search: ['input[data-testid="search-input"]'],
+        searchUrl: q => `https://open.spotify.com/search/${encodeURIComponent(q)}`,
+        actions: { play: ['button[data-testid="control-button-playpause"]'] },
+    },
+    {
+        id: 'maps', name: 'Google Maps', match: ['google.com/maps', 'maps.google'],
+        home: 'https://www.google.com/maps',
+        search: ['input#searchboxinput'],
+        searchUrl: q => `https://www.google.com/maps/search/${encodeURIComponent(q)}`,
+    },
+    {
+        id: 'drive', name: 'Google Drive', match: ['drive.google.com'],
+        home: 'https://drive.google.com',
+        search: ['input[aria-label="Search in Drive"]', 'input[placeholder*="Search" i]'],
+    },
+    {
+        id: 'notion', name: 'Notion', match: ['notion.so', 'notion.com'],
+        home: 'https://www.notion.so',
+        search: ['div[role="button"][aria-label="Search"]'],
+    },
+    {
+        id: 'stackblitz', name: 'StackBlitz', match: ['stackblitz.com'], home: 'https://stackblitz.com',
+    },
+    {
+        id: 'hackernews', name: 'Hacker News', match: ['news.ycombinator.com'],
+        home: 'https://news.ycombinator.com',
+        searchUrl: q => `https://hn.algolia.com/?q=${encodeURIComponent(q)}`,
+    },
+    {
+        id: 'ebay', name: 'eBay', match: ['ebay.com', 'ebay.co'],
+        home: 'https://www.ebay.com',
+        search: ['input#gh-ac'],
+        searchUrl: q => `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}`,
+    },
+    {
+        id: 'flipkart', name: 'Flipkart', match: ['flipkart.com'],
+        home: 'https://www.flipkart.com',
+        search: ['input[name="q"]', 'input[title="Search for products, brands and more"]'],
+        searchUrl: q => `https://www.flipkart.com/search?q=${encodeURIComponent(q)}`,
+    },
+];
+/** Find the profile for a URL (or a bare site name the user typed). */
+function matchSite(urlOrName) {
+    if (!urlOrName)
+        return null;
+    const s = urlOrName.toLowerCase();
+    // Longest match wins so "google.com/maps" beats "google.com".
+    let best = null;
+    let bestLen = 0;
+    for (const p of SITE_PROFILES) {
+        for (const m of p.match) {
+            if (s.includes(m) && m.length > bestLen) {
+                best = p;
+                bestLen = m.length;
+            }
+        }
+    }
+    if (best)
+        return best;
+    // Bare name: "search youtube for x" / "open spotify"
+    for (const p of SITE_PROFILES) {
+        if (new RegExp(`\\b${p.id}\\b`).test(s))
+            return p;
+    }
+    return null;
+}
+/** A direct search URL for a site, when we know one. */
+function siteSearchUrl(profile, query) {
+    return profile.searchUrl ? profile.searchUrl(query) : null;
+}
+/** Selectors for a named on-page action ("subscribe", "compose"…). */
+function siteActionSelectors(profile, intent) {
+    if (!profile.actions)
+        return null;
+    const key = intent.toLowerCase();
+    for (const [name, sels] of Object.entries(profile.actions)) {
+        if (key.includes(name))
+            return sels;
+    }
+    return null;
+}
+
+
+/***/ },
+
+/***/ "./src/background/smart-router.ts"
+/*!****************************************!*\
+  !*** ./src/background/smart-router.ts ***!
+  \****************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   getSettings: () => (/* binding */ getSettings),
+/* harmony export */   ingestPage: () => (/* binding */ ingestPage),
+/* harmony export */   routeUserInput: () => (/* binding */ routeUserInput),
+/* harmony export */   routerReport: () => (/* binding */ routerReport),
+/* harmony export */   setSettings: () => (/* binding */ setSettings)
+/* harmony export */ });
+/* harmony import */ var _bus__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./bus */ "./src/background/bus.ts");
+/* harmony import */ var _local_brain__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./local-brain */ "./src/background/local-brain.ts");
+/* harmony import */ var _response_cache__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./response-cache */ "./src/background/response-cache.ts");
+/* harmony import */ var _local_llm__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./local-llm */ "./src/background/local-llm.ts");
+/* harmony import */ var _knowledge_base__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./knowledge-base */ "./src/background/knowledge-base.ts");
+/* harmony import */ var _brain__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./brain */ "./src/background/brain.ts");
+/* harmony import */ var _tools__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./tools */ "./src/background/tools.ts");
+// The router. Every user request enters here and leaves at the cheapest tier
+// that can genuinely answer it.
+//
+//   Tier 0  local-brain     storage / DOM / site knowledge   free, instant
+//   Tier 1  response-cache  a previous answer, still valid   free, instant
+//   Tier 2  local-llm       on-device summarise / ask        free, ~0.5 s
+//   Tier 3  brain.ts        the cloud model                  costs quota
+//
+// Each tier may decline (return null) and the request falls through.
+
+
+
+
+
+
+
+const DEFAULTS = {
+    localFirst: true,
+    useCache: true,
+    useLocalLlm: true,
+    autoIndex: true,
+    passiveSuggest: true,
+};
+async function getSettings() {
+    const r = await chrome.storage.local.get(['echo_local_settings']);
+    return { ...DEFAULTS, ...(r.echo_local_settings || {}) };
+}
+async function setSettings(patch) {
+    const next = { ...(await getSettings()), ...patch };
+    await chrome.storage.local.set({ echo_local_settings: next });
+    return next;
+}
+// --- request shape detection ----------------------------------------------
+const SUMMARIZE_RE = /\b(summar(y|ise|ize)|tldr|tl;dr|key points?|main points?|gist|what.{0,15}(this page|this article|it).{0,10}about|brief me)\b/i;
+const PAGE_QA_RE = /\b(this page|this article|this site|on this page|here|the page|above|below)\b/i;
+const RESEARCH_RE = /\b(research|compare|all (my |these )?tabs|across (my )?tabs|every tab|these pages)\b/i;
+function isSummarize(q) { return SUMMARIZE_RE.test(q); }
+function isPageQuestion(q) {
+    return PAGE_QA_RE.test(q) && /\?|\b(what|who|when|where|why|how|does|is|are|can|which)\b/i.test(q);
+}
+function isResearch(q) { return RESEARCH_RE.test(q); }
+/** Pull readable text out of a tab, preferring the live DOM. */
+async function pageText(tabId) {
+    if (tabId == null)
+        return null;
+    try {
+        const res = await (0,_tools__WEBPACK_IMPORTED_MODULE_6__.executeTool)('get_page_text', {}, tabId);
+        const raw = typeof res === 'string' ? res : (res?.result || res?.text || '');
+        if (!raw || raw.length < 150)
+            return null;
+        const tab = await chrome.tabs.get(tabId).catch(() => null);
+        const title = (raw.match(/^TITLE:\s*(.+)$/m)?.[1] || tab?.title || '').trim();
+        return { text: raw.replace(/^TITLE:.*$/m, '').trim(), title, url: tab?.url || '' };
+    }
+    catch {
+        return null;
+    }
+}
+// --- the router ------------------------------------------------------------
+async function routeUserInput(rawInput, senderTabId) {
+    const input = (rawInput || '').trim();
+    if (!input)
+        return;
+    const tabId = await (0,_bus__WEBPACK_IMPORTED_MODULE_0__.resolveActiveTab)(senderTabId);
+    (0,_bus__WEBPACK_IMPORTED_MODULE_0__.echoUser)(input);
+    const settings = await getSettings();
+    const tab = tabId != null ? await chrome.tabs.get(tabId).catch(() => null) : null;
+    const url = tab?.url || '';
+    // If the user disabled the local stack, go straight to the cloud.
+    if (!settings.localFirst) {
+        await runCloud(input, tabId, url);
+        return;
+    }
+    try {
+        // ---- Tier 0: instant local ------------------------------------------
+        const local = await (0,_local_brain__WEBPACK_IMPORTED_MODULE_1__.handleLocally)(input, tabId);
+        if (local)
+            return;
+        // Requests that plainly need real generation skip the cheap tiers.
+        const forceCloud = (0,_local_brain__WEBPACK_IMPORTED_MODULE_1__.needsCloud)(input);
+        // ---- Tier 1: response cache -----------------------------------------
+        if (settings.useCache && !forceCloud) {
+            const hit = await (0,_response_cache__WEBPACK_IMPORTED_MODULE_2__.cacheLookup)(input, url);
+            if (hit) {
+                const age = Math.round(hit.ageMs / 60000);
+                const note = hit.exact ? '' : ' (from a very similar earlier question)';
+                (0,_bus__WEBPACK_IMPORTED_MODULE_0__.say)(tabId, hit.answer + `\n\n_Answered from memory${note}${age > 0 ? `, saved ${age} min ago` : ''}._`, 1);
+                (0,_bus__WEBPACK_IMPORTED_MODULE_0__.setState)(tabId, 'Idle');
+                await (0,_local_brain__WEBPACK_IMPORTED_MODULE_1__.bumpTier)(1);
+                return;
+            }
+        }
+        // ---- Tier 2: on-device model ----------------------------------------
+        if (settings.useLocalLlm && !forceCloud && tabId != null) {
+            const handled = await tryLocalLlm(input, tabId, url);
+            if (handled)
+                return;
+        }
+        // ---- Tier 3: cloud --------------------------------------------------
+        await runCloud(input, tabId, url);
+    }
+    catch (e) {
+        // The router itself must never be the thing that breaks a request.
+        console.error('[ECHO] router error:', e);
+        await runCloud(input, tabId, url);
+    }
+}
+async function tryLocalLlm(input, tabId, url) {
+    // Research across tabs — many pages, one (or zero) model calls.
+    if (isResearch(input)) {
+        const tabs = await chrome.tabs.query({ currentWindow: true });
+        const targets = tabs.filter(t => t.id != null && /^https?:/.test(t.url || '')).slice(0, 8);
+        if (targets.length >= 2) {
+            (0,_bus__WEBPACK_IMPORTED_MODULE_0__.setState)(tabId, `Reading ${targets.length} tabs on-device…`);
+            const docs = [];
+            for (const t of targets) {
+                const p = await pageText(t.id);
+                if (p)
+                    docs.push({ title: p.title || t.title || '', url: t.url || '', text: p.text });
+            }
+            if (docs.length >= 2) {
+                const out = await (0,_local_llm__WEBPACK_IMPORTED_MODULE_3__.localSynthesize)(docs);
+                (0,_bus__WEBPACK_IMPORTED_MODULE_0__.say)(tabId, `Here's what's across your ${docs.length} tabs:\n\n${out.text}`, 2);
+                (0,_bus__WEBPACK_IMPORTED_MODULE_0__.setState)(tabId, 'Idle');
+                await (0,_local_brain__WEBPACK_IMPORTED_MODULE_1__.bumpTier)(2);
+                await (0,_response_cache__WEBPACK_IMPORTED_MODULE_2__.cacheStore)(input, url, out.text);
+                return true;
+            }
+        }
+        return false;
+    }
+    // Summarise the current page.
+    if (isSummarize(input)) {
+        (0,_bus__WEBPACK_IMPORTED_MODULE_0__.setState)(tabId, 'Reading the page on-device…');
+        const p = await pageText(tabId);
+        if (!p)
+            return false;
+        const out = await (0,_local_llm__WEBPACK_IMPORTED_MODULE_3__.localSummarize)(p.text, p.title);
+        if (!out.text || out.text.length < 60)
+            return false;
+        const badge = out.engine === 'chrome-ai' ? 'on-device AI' : 'on-device reader';
+        (0,_bus__WEBPACK_IMPORTED_MODULE_0__.say)(tabId, `${out.text}\n\n_Summarised by ${badge} — no API used._`, 2);
+        (0,_bus__WEBPACK_IMPORTED_MODULE_0__.setState)(tabId, 'Idle');
+        await (0,_local_brain__WEBPACK_IMPORTED_MODULE_1__.bumpTier)(2);
+        await (0,_response_cache__WEBPACK_IMPORTED_MODULE_2__.cacheStore)(input, url, out.text);
+        if (p.url)
+            (0,_knowledge_base__WEBPACK_IMPORTED_MODULE_4__.indexPage)(p.url, p.title, p.text).catch(() => { });
+        return true;
+    }
+    // Answer a question about the current page.
+    if (isPageQuestion(input)) {
+        (0,_bus__WEBPACK_IMPORTED_MODULE_0__.setState)(tabId, 'Checking the page on-device…');
+        const p = await pageText(tabId);
+        if (!p)
+            return false;
+        const out = await (0,_local_llm__WEBPACK_IMPORTED_MODULE_3__.localAsk)(input, p.text, p.title);
+        // Only accept a confident local answer; otherwise let the cloud try.
+        if (!out || out.text.length < 40 || /don'?t (know|contain)|not (in|contain|mention)/i.test(out.text)) {
+            return false;
+        }
+        const badge = out.engine === 'chrome-ai' ? 'on-device AI' : 'the page text';
+        (0,_bus__WEBPACK_IMPORTED_MODULE_0__.say)(tabId, `${out.text}\n\n_Answered from ${badge} — no API used._`, 2);
+        (0,_bus__WEBPACK_IMPORTED_MODULE_0__.setState)(tabId, 'Idle');
+        await (0,_local_brain__WEBPACK_IMPORTED_MODULE_1__.bumpTier)(2);
+        await (0,_response_cache__WEBPACK_IMPORTED_MODULE_2__.cacheStore)(input, url, out.text);
+        return true;
+    }
+    return false;
+}
+async function runCloud(input, tabId, url) {
+    await (0,_local_brain__WEBPACK_IMPORTED_MODULE_1__.bumpTier)(3);
+    await (0,_brain__WEBPACK_IMPORTED_MODULE_5__.processUserInput)(input, tabId, { skipEcho: true });
+    // Store the cloud's reply so an identical question is free next time.
+    const reply = (0,_brain__WEBPACK_IMPORTED_MODULE_5__.lastCloudReply)();
+    if (reply)
+        await (0,_response_cache__WEBPACK_IMPORTED_MODULE_2__.cacheStore)(input, url, reply);
+}
+// --- knowledge-base ingestion ---------------------------------------------
+/** Called when a content script reports the page it just rendered. */
+async function ingestPage(url, title, text) {
+    const s = await getSettings();
+    if (!s.autoIndex)
+        return;
+    await (0,_knowledge_base__WEBPACK_IMPORTED_MODULE_4__.indexPage)(url, title, text);
+}
+async function routerReport() {
+    const s = await (0,_local_brain__WEBPACK_IMPORTED_MODULE_1__.routerStats)();
+    const engine = await (0,_local_llm__WEBPACK_IMPORTED_MODULE_3__.activeEngine)();
+    const total = s.t0 + s.t1 + s.t2 + s.t3;
+    if (!total)
+        return 'No requests handled yet.';
+    const local = s.t0 + s.t1 + s.t2;
+    return [
+        `${total} requests · ${Math.round((local / total) * 100)}% handled locally`,
+        `instant ${s.t0} · cached ${s.t1} · on-device ${s.t2} · cloud ${s.t3}`,
+        `on-device engine: ${engine === 'chrome-ai' ? "Chrome built-in AI" : 'extractive reader'}`,
+    ].join('\n');
 }
 
 
@@ -2093,11 +4062,37 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   executeTool: () => (/* binding */ executeTool)
 /* harmony export */ });
+// Poll until a tab's status is 'complete' or the timeout fires.
+// Resolves early on chrome.runtime.lastError so callers never hang.
+function waitForTabLoad(tabId, timeout = 9000) {
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const poll = () => {
+            chrome.tabs.get(tabId, (tab) => {
+                if (chrome.runtime.lastError || !tab || tab.status === 'complete') {
+                    resolve();
+                    return;
+                }
+                if (Date.now() - start > timeout) {
+                    resolve();
+                    return;
+                }
+                setTimeout(poll, 300);
+            });
+        };
+        setTimeout(poll, 700); // give the navigation a moment to start
+    });
+}
 // Tools that run inside the page and are forwarded to the content script.
+// The second group is used by the local (Tier 0/1) stack rather than the model.
 const DOM_ACTIONS = new Set([
     'read_screen', 'click_element', 'type_text', 'press_key',
     'scroll', 'find_on_page', 'get_page_text', 'extract_table',
-    'go_back', 'go_forward'
+    'go_back', 'go_forward',
+    // local-stack actions
+    'extract_pattern', 'fill_form', 'click_selector', 'read_value',
+    'record_start', 'record_stop', 'play_step',
+    'render_highlights', 'clear_highlights',
 ]);
 async function executeTool(toolName, args, tabId) {
     if (DOM_ACTIONS.has(toolName)) {
@@ -2127,26 +4122,34 @@ async function executeTool(toolName, args, tabId) {
             });
         }
         case 'open_url': {
-            return new Promise((resolve, reject) => {
+            // Create the tab, wait for it to fully load, then return the NEW tab's id.
+            // The brain loops watch for `newTabId` in the result and update their
+            // activeTabId so all subsequent DOM actions go to the right tab.
+            const newTab = await new Promise((resolve, reject) => {
                 chrome.tabs.create({ url: args.url }, (tab) => {
                     if (chrome.runtime.lastError)
                         reject(new Error(chrome.runtime.lastError.message));
                     else
-                        resolve({ tabId: tab.id });
+                        resolve(tab);
                 });
             });
+            await waitForTabLoad(newTab.id);
+            return { success: true, newTabId: newTab.id, message: `Opened ${args.url} in a new tab (id: ${newTab.id}). Use read_screen now to see it.` };
         }
         case 'navigate': {
             if (!tabId)
                 throw new Error('No active tab to navigate');
-            return new Promise((resolve, reject) => {
-                chrome.tabs.update(tabId, { url: args.url }, (tab) => {
+            await new Promise((resolve, reject) => {
+                chrome.tabs.update(tabId, { url: args.url }, () => {
                     if (chrome.runtime.lastError)
                         reject(new Error(chrome.runtime.lastError.message));
                     else
-                        resolve({ success: true, message: `Navigating to ${args.url}` });
+                        resolve();
                 });
             });
+            // Wait for the page to finish loading before the brain calls read_screen.
+            await waitForTabLoad(tabId);
+            return { success: true, message: `Navigated to ${args.url} — page loaded, ready for read_screen.` };
         }
         case 'list_tabs': {
             return new Promise((resolve, reject) => {
@@ -2283,6 +4286,178 @@ async function executeTool(toolName, args, tabId) {
         default:
             throw new Error(`Unknown tool: ${toolName}`);
     }
+}
+
+
+/***/ },
+
+/***/ "./src/background/workflow-engine.ts"
+/*!*******************************************!*\
+  !*** ./src/background/workflow-engine.ts ***!
+  \*******************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   cancelRecording: () => (/* binding */ cancelRecording),
+/* harmony export */   deleteWorkflow: () => (/* binding */ deleteWorkflow),
+/* harmony export */   findWorkflowKey: () => (/* binding */ findWorkflowKey),
+/* harmony export */   isRecording: () => (/* binding */ isRecording),
+/* harmony export */   listWorkflows: () => (/* binding */ listWorkflows),
+/* harmony export */   playWorkflow: () => (/* binding */ playWorkflow),
+/* harmony export */   recordingTab: () => (/* binding */ recordingTab),
+/* harmony export */   startRecording: () => (/* binding */ startRecording),
+/* harmony export */   stopRecording: () => (/* binding */ stopRecording)
+/* harmony export */ });
+// Tier 0 — workflow recorder & player.
+//
+// "Watch me" captures the clicks and keystrokes you perform, stores them as
+// resolvable selectors, and replays them on demand. A recorded login, checkout
+// or daily routine then costs zero tokens forever.
+let recording = null;
+function isRecording() { return recording !== null; }
+function recordingTab() { return recording?.tabId ?? null; }
+async function startRecording(tabId, startUrl) {
+    recording = { tabId, startUrl, startedAt: Date.now() };
+    await chrome.tabs.sendMessage(tabId, { type: 'DOM_ACTION', action: 'record_start', args: {} })
+        .catch(() => { });
+}
+/** Pull the captured steps out of the page and persist them under `name`. */
+async function stopRecording(name) {
+    if (!recording)
+        return { ok: false, count: 0, message: 'Not currently recording.' };
+    const { tabId, startUrl } = recording;
+    recording = null;
+    let steps = [];
+    try {
+        const res = await chrome.tabs.sendMessage(tabId, { type: 'DOM_ACTION', action: 'record_stop', args: {} });
+        if (res?.success && Array.isArray(res.result?.steps))
+            steps = res.result.steps;
+    }
+    catch {
+        return { ok: false, count: 0, message: 'Lost contact with the page — nothing was saved.' };
+    }
+    if (!steps.length) {
+        return { ok: false, count: 0, message: "I didn't capture any actions, so there's nothing to save." };
+    }
+    const wf = { name: name.trim(), steps, startUrl, created: Date.now(), runs: 0 };
+    const all = await listWorkflows();
+    all[wf.name] = wf;
+    await chrome.storage.local.set({ echo_workflows: all });
+    return { ok: true, count: steps.length, message: `Saved "${wf.name}" — ${steps.length} steps.` };
+}
+async function cancelRecording() {
+    if (!recording)
+        return;
+    const { tabId } = recording;
+    recording = null;
+    await chrome.tabs.sendMessage(tabId, { type: 'DOM_ACTION', action: 'record_stop', args: {} }).catch(() => { });
+}
+async function listWorkflows() {
+    const r = await chrome.storage.local.get(['echo_workflows']);
+    return (r.echo_workflows || {});
+}
+async function deleteWorkflow(name) {
+    const all = await listWorkflows();
+    const key = findWorkflowKey(all, name);
+    if (!key)
+        return false;
+    delete all[key];
+    await chrome.storage.local.set({ echo_workflows: all });
+    return true;
+}
+/** Tolerant name lookup so "run my standup" finds "daily standup". */
+function findWorkflowKey(all, name) {
+    const n = name.toLowerCase().trim();
+    if (!n)
+        return null;
+    const keys = Object.keys(all);
+    const exact = keys.find(k => k.toLowerCase() === n);
+    if (exact)
+        return exact;
+    const contains = keys.find(k => k.toLowerCase().includes(n) || n.includes(k.toLowerCase()));
+    return contains || null;
+}
+/**
+ * Replay a workflow in `tabId`. Navigation steps wait for load; everything
+ * else is handed to the content script, which resolves the selector list.
+ */
+async function playWorkflow(name, tabId) {
+    const all = await listWorkflows();
+    const key = findWorkflowKey(all, name);
+    if (!key) {
+        const names = Object.keys(all);
+        return {
+            ok: false, done: 0, total: 0,
+            message: names.length
+                ? `I don't have a workflow called "${name}". I have: ${names.join(', ')}.`
+                : `I don't have any workflows saved yet. Say "record a workflow" to make one.`,
+        };
+    }
+    const wf = all[key];
+    let done = 0;
+    // Start from the page the recording began on, so selectors line up.
+    if (wf.startUrl) {
+        try {
+            await chrome.tabs.update(tabId, { url: wf.startUrl });
+            await waitForLoad(tabId);
+        }
+        catch { /* keep going on the current page */ }
+    }
+    for (const step of wf.steps) {
+        try {
+            if (step.type === 'navigate' && step.url) {
+                await chrome.tabs.update(tabId, { url: step.url });
+                await waitForLoad(tabId);
+                done++;
+                continue;
+            }
+            if (step.type === 'wait') {
+                await sleep(Math.min(step.ms || 500, 5000));
+                done++;
+                continue;
+            }
+            const res = await chrome.tabs.sendMessage(tabId, {
+                type: 'DOM_ACTION', action: 'play_step', args: step,
+            });
+            if (!res?.success) {
+                return {
+                    ok: false, done, total: wf.steps.length,
+                    message: `Stopped at step ${done + 1} of ${wf.steps.length} — couldn't find "${step.label || step.type}". The page may have changed since I recorded it.`,
+                };
+            }
+            done++;
+            // Let the page react between actions.
+            await sleep(step.type === 'click' ? 600 : 250);
+        }
+        catch {
+            return {
+                ok: false, done, total: wf.steps.length,
+                message: `Stopped at step ${done + 1} — the page navigated away mid-run.`,
+            };
+        }
+    }
+    wf.runs = (wf.runs || 0) + 1;
+    all[key] = wf;
+    await chrome.storage.local.set({ echo_workflows: all });
+    return { ok: true, done, total: wf.steps.length, message: `Ran "${key}" — all ${done} steps completed.` };
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function waitForLoad(tabId, timeout = 9000) {
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const poll = () => {
+            chrome.tabs.get(tabId, (tab) => {
+                if (chrome.runtime.lastError || !tab || tab.status === 'complete')
+                    return resolve();
+                if (Date.now() - start > timeout)
+                    return resolve();
+                setTimeout(poll, 300);
+            });
+        };
+        setTimeout(poll, 700);
+    });
 }
 
 
@@ -43118,11 +45293,20 @@ let __webpack_exports__ = {};
 __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _tools__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./tools */ "./src/background/tools.ts");
 /* harmony import */ var _brain__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./brain */ "./src/background/brain.ts");
+/* harmony import */ var _smart_router__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./smart-router */ "./src/background/smart-router.ts");
+/* harmony import */ var _highlights__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./highlights */ "./src/background/highlights.ts");
+/* harmony import */ var _page_watcher__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./page-watcher */ "./src/background/page-watcher.ts");
+/* harmony import */ var _response_cache__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./response-cache */ "./src/background/response-cache.ts");
+/* harmony import */ var _bus__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./bus */ "./src/background/bus.ts");
+
+
+
+
+
 
 
 console.log('ECHO Background Service Worker initialized.');
 let isEchoAwake = false;
-// Initialize state in session storage
 chrome.storage.session.set({ isEchoAwake });
 const broadcastWakeState = async () => {
     const tabs = await chrome.tabs.query({});
@@ -43181,8 +45365,19 @@ chrome.runtime.onInstalled.addListener(() => {
     try {
         chrome.contextMenus.create({ id: 'echo-open-panel', title: 'Open ECHO chat panel', contexts: ['all'] });
         chrome.contextMenus.create({ id: 'echo-ask-selection', title: 'Ask ECHO about "%s"', contexts: ['selection'] });
+        chrome.contextMenus.create({ id: 'echo-save-highlight', title: 'Save "%s" to ECHO highlights', contexts: ['selection'] });
+        chrome.contextMenus.create({ id: 'echo-fill-form', title: 'Fill this form with ECHO', contexts: ['editable', 'page'] });
+        chrome.contextMenus.create({ id: 'echo-summarize', title: 'Summarize this page (no API)', contexts: ['page'] });
     }
     catch { /* ignore duplicate-id on reload */ }
+    // Housekeeping on install/update.
+    ;(0,_response_cache__WEBPACK_IMPORTED_MODULE_5__.cachePrune)().catch(() => { });
+    (0,_page_watcher__WEBPACK_IMPORTED_MODULE_4__.rehydrateWatchers)().catch(() => { });
+});
+// Alarms and watchers survive restarts; re-arm them when the worker wakes.
+chrome.runtime.onStartup?.addListener(() => {
+    (0,_page_watcher__WEBPACK_IMPORTED_MODULE_4__.rehydrateWatchers)().catch(() => { });
+    (0,_response_cache__WEBPACK_IMPORTED_MODULE_5__.cachePrune)().catch(() => { });
 });
 chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
     if (info.menuItemId === 'echo-open-panel') {
@@ -43190,14 +45385,31 @@ chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
     }
     else if (info.menuItemId === 'echo-ask-selection' && info.selectionText) {
         await openSidePanel(tab?.windowId);
-        (0,_brain__WEBPACK_IMPORTED_MODULE_1__.processUserInput)(`About this selected text: "${info.selectionText}"`, tab?.id);
+        (0,_smart_router__WEBPACK_IMPORTED_MODULE_2__.routeUserInput)(`About this selected text: "${info.selectionText}"`, tab?.id);
+    }
+    else if (info.menuItemId === 'echo-save-highlight' && info.selectionText) {
+        const h = await (0,_highlights__WEBPACK_IMPORTED_MODULE_3__.saveHighlight)(info.pageUrl || tab?.url || '', tab?.title || '', info.selectionText);
+        (0,_bus__WEBPACK_IMPORTED_MODULE_6__.say)(tab?.id, `Saved that highlight.`, 0);
+        if (tab?.id) {
+            chrome.tabs.sendMessage(tab.id, { type: 'ECHO_APPLY_HIGHLIGHTS', texts: [h.text] }).catch(() => { });
+        }
+    }
+    else if (info.menuItemId === 'echo-fill-form') {
+        (0,_smart_router__WEBPACK_IMPORTED_MODULE_2__.routeUserInput)('fill this form', tab?.id);
+    }
+    else if (info.menuItemId === 'echo-summarize') {
+        (0,_smart_router__WEBPACK_IMPORTED_MODULE_2__.routeUserInput)('summarize this page', tab?.id);
     }
 });
 // 1x1 PNG data URI so chrome.notifications (type 'basic' requires an icon)
 // never fails for lack of a packaged icon file.
 const NOTIF_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-// Scheduled reminders fire here.
+// Alarms: scheduled reminders AND page watchers land here.
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+    if (alarm.name.startsWith(_page_watcher__WEBPACK_IMPORTED_MODULE_4__.WATCH_ALARM_PREFIX)) {
+        await (0,_page_watcher__WEBPACK_IMPORTED_MODULE_4__.runWatcherCheck)(alarm.name).catch(() => { });
+        return;
+    }
     if (!alarm.name.startsWith('echo_reminder_'))
         return;
     const { echo_reminders } = await chrome.storage.local.get(['echo_reminders']);
@@ -43213,27 +45425,32 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         priority: 2
     });
 });
-// Clicking a reminder notification runs its attached saved task, if any.
+// Clicking a notification: reminders run their task, watchers open their page.
 chrome.notifications.onClicked.addListener(async (notificationId) => {
+    chrome.notifications.clear(notificationId);
+    if (notificationId.startsWith(_page_watcher__WEBPACK_IMPORTED_MODULE_4__.WATCH_ALARM_PREFIX)) {
+        const watchers = await (0,_page_watcher__WEBPACK_IMPORTED_MODULE_4__.listWatchers)();
+        const w = watchers[notificationId];
+        if (w?.url)
+            chrome.tabs.create({ url: w.url });
+        return;
+    }
     const { echo_reminders, echo_tasks } = await chrome.storage.local.get(['echo_reminders', 'echo_tasks']);
     const reminder = (echo_reminders || {})[notificationId];
-    chrome.notifications.clear(notificationId);
     if (reminder?.taskName) {
         const instructions = (echo_tasks || {})[reminder.taskName];
         if (instructions) {
             await openSidePanel();
-            (0,_brain__WEBPACK_IMPORTED_MODULE_1__.processUserInput)(`Now carry out this saved task step by step:\n${instructions}`);
+            (0,_smart_router__WEBPACK_IMPORTED_MODULE_2__.routeUserInput)(`Now carry out this saved task step by step:\n${instructions}`);
         }
     }
 });
-// Listen for messages from content script (e.g. ECHO requests from the UI)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'CHECK_AWAKE_STATE') {
         sendResponse({ isAwake: isEchoAwake });
-        return false; // synchronous response
+        return false;
     }
     if (message.type === 'WAKE_ECHO_REQUEST') {
-        // Triggered by the options page "Wake ECHO" button.
         isEchoAwake = true;
         chrome.storage.session.set({ isEchoAwake });
         broadcastWakeState();
@@ -43244,15 +45461,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (0,_tools__WEBPACK_IMPORTED_MODULE_0__.executeTool)(message.toolName, message.args, sender.tab?.id)
             .then(result => sendResponse({ success: true, result }))
             .catch(error => sendResponse({ success: false, error: error.message }));
-        return true; // Keep the message channel open for async response
+        return true;
     }
+    // Every user request now enters through the router, which spends the
+    // cheapest tier that can answer it and only reaches the cloud when needed.
     if (message.type === 'USER_INPUT') {
+        (0,_smart_router__WEBPACK_IMPORTED_MODULE_2__.routeUserInput)(message.text, sender.tab?.id);
+        sendResponse({ success: true });
+        return false;
+    }
+    // Escape hatch: force the cloud brain, bypassing tiers 0-2.
+    if (message.type === 'USER_INPUT_CLOUD') {
         (0,_brain__WEBPACK_IMPORTED_MODULE_1__.processUserInput)(message.text, sender.tab?.id);
         sendResponse({ success: true });
+        return false;
     }
     if (message.type === 'ECHO_ABORT') {
         (0,_brain__WEBPACK_IMPORTED_MODULE_1__.abortCurrentWork)();
         sendResponse({ success: true });
+        return false;
+    }
+    // --- local stack plumbing ------------------------------------------------
+    if (message.type === 'ECHO_INDEX_PAGE') {
+        (0,_smart_router__WEBPACK_IMPORTED_MODULE_2__.ingestPage)(message.url, message.title, message.text).catch(() => { });
+        sendResponse({ success: true });
+        return false;
+    }
+    if (message.type === 'ECHO_SAVE_HIGHLIGHT') {
+        (0,_highlights__WEBPACK_IMPORTED_MODULE_3__.saveHighlight)(message.url, message.title, message.text)
+            .then(h => sendResponse({ success: true, id: h.id }))
+            .catch(() => sendResponse({ success: false }));
+        return true;
+    }
+    if (message.type === 'ECHO_GET_HIGHLIGHTS') {
+        (0,_highlights__WEBPACK_IMPORTED_MODULE_3__.highlightsForUrl)(message.url)
+            .then(list => sendResponse({ success: true, texts: list.map(h => h.text) }))
+            .catch(() => sendResponse({ success: true, texts: [] }));
+        return true;
+    }
+    if (message.type === 'ECHO_GET_SETTINGS') {
+        (0,_smart_router__WEBPACK_IMPORTED_MODULE_2__.getSettings)().then(s => sendResponse({ success: true, settings: s }));
+        return true;
+    }
+    if (message.type === 'ECHO_SET_SETTINGS') {
+        (0,_smart_router__WEBPACK_IMPORTED_MODULE_2__.setSettings)(message.patch || {}).then(s => sendResponse({ success: true, settings: s }));
+        return true;
+    }
+    if (message.type === 'ECHO_ROUTER_REPORT') {
+        (0,_smart_router__WEBPACK_IMPORTED_MODULE_2__.routerReport)().then(text => sendResponse({ success: true, text }));
+        return true;
     }
     if (message.type === 'ECHO_SYNC_POSITION') {
         chrome.tabs.query({}, (tabs) => {
@@ -43263,6 +45520,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             });
         });
         sendResponse({ success: true });
+        return false;
     }
 });
 

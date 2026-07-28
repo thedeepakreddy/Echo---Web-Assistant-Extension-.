@@ -6,6 +6,11 @@
 // coordinates — this is far more reliable than document.elementFromPoint,
 // which breaks with fixed headers, overlays, and any scrolling.
 
+import { extractPattern, PatternKind } from './extractors';
+import { fillForm } from './form-filler';
+import { startRecording, stopRecording, playStep, RecordedStep } from './recorder';
+import { renderHighlights, clearRenderedHighlights } from './highlighter';
+
 let echoElements: HTMLElement[] = [];
 
 const INTERACTIVE_SELECTOR = [
@@ -202,6 +207,67 @@ export function handleDomAction(action: string, args: any): any {
         Array.from(tr.querySelectorAll('th,td')).map(td => (td as HTMLElement).innerText.replace(/\s+/g, ' ').trim())
       );
       return { success: true, result: JSON.stringify({ tableIndex: wanted, totalTables: tables.length, rows }) };
+    }
+
+    // --- local (Tier 0/1) actions — no model involved ---------------------
+
+    case 'extract_pattern': {
+      const result = extractPattern(String(args.kind || 'emails') as PatternKind);
+      return { success: true, result };
+    }
+
+    case 'fill_form': {
+      const report = fillForm((args.memory || {}) as Record<string, string>);
+      return { success: true, result: report };
+    }
+
+    case 'click_selector': {
+      // Try each candidate selector until one resolves to a visible element.
+      const selectors: string[] = Array.isArray(args.selectors) ? args.selectors : [String(args.selector || '')];
+      for (const sel of selectors) {
+        if (!sel) continue;
+        try {
+          const el = Array.from(document.querySelectorAll<HTMLElement>(sel)).find(isVisible);
+          if (!el) continue;
+          try { el.scrollIntoView({ block: 'center' }); } catch { /* ignore */ }
+          el.click();
+          return { success: true, result: { clicked: true, selector: sel } };
+        } catch { /* invalid selector — try the next */ }
+      }
+      return { success: true, result: { clicked: false } };
+    }
+
+    case 'read_value': {
+      // Used by page watchers: read one element, or the whole page as fallback.
+      const sel = args.selector ? String(args.selector) : '';
+      let value = '';
+      if (sel) {
+        try {
+          const el = document.querySelector<HTMLElement>(sel);
+          value = el ? (el.innerText || (el as HTMLInputElement).value || '') : '';
+        } catch { value = ''; }
+      }
+      if (!value) value = (document.body?.innerText || '').substring(0, 3000);
+      return { success: true, result: { value: value.replace(/\s+/g, ' ').trim() } };
+    }
+
+    case 'record_start':
+      return startRecording();
+
+    case 'record_stop':
+      return stopRecording();
+
+    case 'play_step':
+      return playStep(args as RecordedStep);
+
+    case 'render_highlights': {
+      const painted = renderHighlights((args.texts || []) as string[]);
+      return { success: true, result: { painted } };
+    }
+
+    case 'clear_highlights': {
+      clearRenderedHighlights();
+      return { success: true, result: 'cleared' };
     }
 
     default:

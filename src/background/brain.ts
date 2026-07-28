@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, Type } from '@google/genai';
 import { getAuthConfig, AuthConfig } from './auth';
 import { executeTool } from './tools';
+import { say as busSay, safeSendMessage as busSend, echoUser } from './bus';
 
 // System prompt giving ECHO its identity and instructions.
 // Kept deliberately compact — it is re-sent on every step of the agent loop,
@@ -29,217 +30,61 @@ interface EchoTool {
   schema: { type: 'object'; properties: Record<string, any>; required?: string[] };
 }
 
-const SHARED_TOOLS: EchoTool[] = [
-  {
-    name: "read_screen",
-    description: "Read the page: URL, title, NUMBERED interactive elements, and visible text. Call once before clicking/typing to get element numbers.",
-    schema: { type: "object", properties: {} }
-  },
-  {
-    name: "get_page_text",
-    description: "Get the page's readable text (for summarizing / answering about content).",
-    schema: { type: "object", properties: {} }
-  },
-  {
-    name: "screenshot",
-    description: "Take a visual screenshot. ONLY use for images, colors, or visual layout questions that read_screen cannot answer — it burns API quota.",
-    schema: { type: "object", properties: {} }
-  },
-  {
-    name: "click_element",
-    description: "Click a numbered element from read_screen. Pass its number as 'index'. If the number is missing or wrong, call read_screen again first.",
-    schema: {
-      type: "object",
-      properties: { index: { type: "number", description: "The [number] of the element from read_screen" } },
-      required: ["index"]
-    }
-  },
-  {
-    name: "type_text",
-    description: "Type into a numbered input. submit=true presses Enter (e.g. to search) in one step.",
-    schema: {
-      type: "object",
-      properties: {
-        index: { type: "number", description: "element number from read_screen" },
-        text: { type: "string" },
-        submit: { type: "boolean" }
-      },
-      required: ["index", "text"]
-    }
-  },
-  {
-    name: "press_key",
-    description: "Press one key (Enter, Escape, Tab, Backspace, Delete, Arrow keys) on the focused element.",
-    schema: {
-      type: "object",
-      properties: { key: { type: "string" } },
-      required: ["key"]
-    }
-  },
-  {
-    name: "scroll",
-    description: "Scroll the page vertically. Positive amount scrolls down, negative scrolls up (in pixels).",
-    schema: {
-      type: "object",
-      properties: { amount: { type: "number", description: "Pixels to scroll (positive down, negative up)" } },
-      required: ["amount"]
-    }
-  },
-  {
-    name: "find_on_page",
-    description: "Find text on the page, scroll it into view, and briefly highlight it. Returns whether it was found.",
-    schema: {
-      type: "object",
-      properties: { text: { type: "string", description: "The text to find" } },
-      required: ["text"]
-    }
-  },
-  {
-    name: "extract_table",
-    description: "Extract a table from the page as JSON rows. Optional 'index' picks which table (default 0).",
-    schema: {
-      type: "object",
-      properties: { index: { type: "number", description: "Which table to extract (0-based, optional)" } }
-    }
-  },
-  {
-    name: "open_url",
-    description: "Open a URL in a NEW browser tab.",
-    schema: {
-      type: "object",
-      properties: { url: { type: "string", description: "The URL to open" } },
-      required: ["url"]
-    }
-  },
-  {
-    name: "navigate",
-    description: "Navigate the CURRENT tab to a URL (does not open a new tab).",
-    schema: {
-      type: "object",
-      properties: { url: { type: "string", description: "The URL to navigate to" } },
-      required: ["url"]
-    }
-  },
-  {
-    name: "go_back",
-    description: "Go back one step in the current tab's history.",
-    schema: { type: "object", properties: {} }
-  },
-  {
-    name: "go_forward",
-    description: "Go forward one step in the current tab's history.",
-    schema: { type: "object", properties: {} }
-  },
-  {
-    name: "list_tabs",
-    description: "List the user's open tabs (id, title, url). Use before switching or closing tabs.",
-    schema: { type: "object", properties: {} }
-  },
-  {
-    name: "switch_tab",
-    description: "Focus/activate an open tab by its id (from list_tabs).",
-    schema: {
-      type: "object",
-      properties: { tabId: { type: "number", description: "The id of the tab to activate" } },
-      required: ["tabId"]
-    }
-  },
-  {
-    name: "close_tab",
-    description: "Close an open tab by its id (from list_tabs).",
-    schema: {
-      type: "object",
-      properties: { tabId: { type: "number", description: "The id of the tab to close" } },
-      required: ["tabId"]
-    }
-  },
-  {
-    name: "download_data",
-    description: "Save text content (CSV, JSON, notes, extracted data) as a file download for the user.",
-    schema: {
-      type: "object",
-      properties: {
-        filename: { type: "string", description: "The filename, e.g. 'data.csv'" },
-        content: { type: "string", description: "The text content of the file" }
-      },
-      required: ["filename", "content"]
-    }
-  },
-  {
-    name: "save_memory",
-    description: "Save a fact, preference, or task into ECHO's long-term memory so you remember it across sessions.",
-    schema: {
-      type: "object",
-      properties: {
-        key: { type: "string", description: "A unique, concise key (e.g. 'user_name', 'default_email')" },
-        value: { type: "string", description: "The information to remember" }
-      },
-      required: ["key", "value"]
-    }
-  },
-  {
-    name: "list_memory",
-    description: "List everything currently saved in ECHO's long-term memory.",
-    schema: { type: "object", properties: {} }
-  },
-  {
-    name: "delete_memory",
-    description: "Delete a fact from ECHO's long-term memory by its key.",
-    schema: {
-      type: "object",
-      properties: { key: { type: "string", description: "The key of the memory to delete" } },
-      required: ["key"]
-    }
-  },
-  {
-    name: "save_task",
-    description: "Save a reusable named task (macro) as plain-English instructions to re-run later.",
-    schema: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "Short name for the task" },
-        instructions: { type: "string", description: "The step-by-step instructions to run later" }
-      },
-      required: ["name", "instructions"]
-    }
-  },
-  {
-    name: "run_task",
-    description: "Load a saved task by name. After calling this, immediately carry out the returned instructions using your tools.",
-    schema: {
-      type: "object",
-      properties: { name: { type: "string", description: "The name of the saved task" } },
-      required: ["name"]
-    }
-  },
-  {
-    name: "list_tasks",
-    description: "List all saved tasks (macros) and their instructions.",
-    schema: { type: "object", properties: {} }
-  },
-  {
-    name: "delete_task",
-    description: "Delete a saved task by name.",
-    schema: {
-      type: "object",
-      properties: { name: { type: "string", description: "The name of the saved task" } },
-      required: ["name"]
-    }
-  },
-  {
-    name: "schedule_reminder",
-    description: "Set a reminder that fires a desktop notification after a delay. Optionally attach a saved task name so clicking the notification runs that task.",
-    schema: {
-      type: "object",
-      properties: {
-        message: { type: "string", description: "The reminder message to show" },
-        in_minutes: { type: "number", description: "Minutes from now to fire the reminder (min 0.5)" },
-        task_name: { type: "string", description: "Optional: a saved task to offer to run when clicked" }
-      },
-      required: ["message", "in_minutes"]
-    }
-  }
+// ─── Core tools — always sent (covers 90 % of tasks) ───────────────────────
+// Kept deliberately short: every extra word in a description costs tokens on
+// EVERY step of EVERY task. At 25 tools × 70 tokens × 5 steps that was
+// ~8,750 tokens of pure schema overhead per task, burning free-tier quota in
+// 1-2 tasks. Keeping the always-sent set to 10 slim tools cuts that to ~800.
+const CORE_TOOLS: EchoTool[] = [
+  { name: "read_screen",    description: "Get page URL, title, numbered interactive elements, visible text.", schema: { type: "object", properties: {} } },
+  { name: "get_page_text", description: "Get full readable page text (use to summarize or answer about content).", schema: { type: "object", properties: {} } },
+  { name: "click_element", description: "Click element by number from read_screen.", schema: { type: "object", properties: { index: { type: "number" } }, required: ["index"] } },
+  { name: "type_text",     description: "Type into input by number. submit=true presses Enter.", schema: { type: "object", properties: { index: { type: "number" }, text: { type: "string" }, submit: { type: "boolean" } }, required: ["index", "text"] } },
+  { name: "press_key",     description: "Press key on focused element: Enter, Escape, Tab, Backspace, ArrowUp/Down/Left/Right.", schema: { type: "object", properties: { key: { type: "string" } }, required: ["key"] } },
+  { name: "scroll",        description: "Scroll page (pixels, positive=down, negative=up).", schema: { type: "object", properties: { amount: { type: "number" } }, required: ["amount"] } },
+  { name: "open_url",      description: "Open URL in a new tab.", schema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] } },
+  { name: "navigate",      description: "Navigate current tab to URL.", schema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] } },
+  { name: "go_back",       description: "Go back in browser history.", schema: { type: "object", properties: {} } },
+  { name: "go_forward",    description: "Go forward in browser history.", schema: { type: "object", properties: {} } },
 ];
+
+// ─── Optional tools — added only when the user's request needs them ─────────
+const _T_SCREENSHOT:   EchoTool = { name: "screenshot",       description: "Take visual screenshot (only for color/image questions).", schema: { type: "object", properties: {} } };
+const _T_FIND:         EchoTool = { name: "find_on_page",     description: "Find and highlight text on page.", schema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } };
+const _T_TABLE:        EchoTool = { name: "extract_table",    description: "Extract table as JSON (index=which table, default 0).", schema: { type: "object", properties: { index: { type: "number" } } } };
+const _T_DOWNLOAD:     EchoTool = { name: "download_data",    description: "Save text as file download.", schema: { type: "object", properties: { filename: { type: "string" }, content: { type: "string" } }, required: ["filename", "content"] } };
+const _T_LIST_TABS:    EchoTool = { name: "list_tabs",        description: "List open tabs.", schema: { type: "object", properties: {} } };
+const _T_SWITCH_TAB:   EchoTool = { name: "switch_tab",       description: "Switch to tab by id.", schema: { type: "object", properties: { tabId: { type: "number" } }, required: ["tabId"] } };
+const _T_CLOSE_TAB:    EchoTool = { name: "close_tab",        description: "Close tab by id.", schema: { type: "object", properties: { tabId: { type: "number" } }, required: ["tabId"] } };
+const _T_SAVE_MEM:     EchoTool = { name: "save_memory",      description: "Save fact to memory.", schema: { type: "object", properties: { key: { type: "string" }, value: { type: "string" } }, required: ["key", "value"] } };
+const _T_LIST_MEM:     EchoTool = { name: "list_memory",      description: "List saved memories.", schema: { type: "object", properties: {} } };
+const _T_DEL_MEM:      EchoTool = { name: "delete_memory",    description: "Delete memory by key.", schema: { type: "object", properties: { key: { type: "string" } }, required: ["key"] } };
+const _T_SAVE_TASK:    EchoTool = { name: "save_task",         description: "Save reusable task by name.", schema: { type: "object", properties: { name: { type: "string" }, instructions: { type: "string" } }, required: ["name", "instructions"] } };
+const _T_RUN_TASK:     EchoTool = { name: "run_task",          description: "Run saved task by name.", schema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } };
+const _T_LIST_TASKS:   EchoTool = { name: "list_tasks",        description: "List saved tasks.", schema: { type: "object", properties: {} } };
+const _T_DEL_TASK:     EchoTool = { name: "delete_task",       description: "Delete saved task by name.", schema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } };
+const _T_REMINDER:     EchoTool = { name: "schedule_reminder", description: "Schedule reminder notification (message, in_minutes, optional task_name).", schema: { type: "object", properties: { message: { type: "string" }, in_minutes: { type: "number" }, task_name: { type: "string" } }, required: ["message", "in_minutes"] } };
+
+// Select only the tools the current request likely needs.
+// This is the single biggest token-saving mechanism: on a simple "search for X"
+// task we send 10 tools (~800 tokens) instead of 25 tools (~2,500 tokens).
+function selectTools(userInput: string): EchoTool[] {
+  const q = userInput.toLowerCase();
+  const tools: EchoTool[] = [...CORE_TOOLS];
+
+  if (/screenshot|image|color|colour|picture|visual|photo|look like/.test(q)) tools.push(_T_SCREENSHOT);
+  if (/find|highlight|locate|where is|search.*page/.test(q))                  tools.push(_T_FIND);
+  if (/table|extract|spreadsheet|csv/.test(q))                                 tools.push(_T_TABLE, _T_DOWNLOAD);
+  if (/download|export|save.{0,10}(file|data)|write.*file/.test(q))           tools.push(_T_DOWNLOAD);
+  if (/tab|window|switch tab|other tab|list tab/.test(q))                      tools.push(_T_LIST_TABS, _T_SWITCH_TAB, _T_CLOSE_TAB);
+  if (/remember|memory|forget|recall|store|you know/.test(q))                 tools.push(_T_SAVE_MEM, _T_LIST_MEM, _T_DEL_MEM);
+  if (/task|macro|save.*task|run.*task|saved task/.test(q))                   tools.push(_T_SAVE_TASK, _T_RUN_TASK, _T_LIST_TASKS, _T_DEL_TASK);
+  if (/remind|reminder|alert|notify|in \d+ min/.test(q))                      tools.push(_T_REMINDER);
+
+  // Deduplicate (in case a keyword matched multiple groups)
+  const seen = new Set<string>();
+  return tools.filter(t => seen.has(t.name) ? false : (seen.add(t.name), true));
+}
 
 // Memory state (cleared per session for simplicity in this demo)
 let anthropicClient: Anthropic | null = null;
@@ -373,29 +218,22 @@ async function getClients(config: AuthConfig) {
   return { anthropicClient, geminiClient };
 }
 
-// Append an entry to the persistent transcript (capped) for the side panel.
-function pushTranscript(entry: { role: 'user' | 'echo'; text: string }) {
-  chrome.storage.local.get(['echo_transcript'], (r) => {
-    const t = (r.echo_transcript || []) as any[];
-    t.push({ ...entry, ts: Date.now() });
-    chrome.storage.local.set({ echo_transcript: t.slice(-200) });
-  });
-}
+// UI delivery lives in bus.ts so the local tiers and the cloud brain reach the
+// orb, the side panel and the transcript through exactly the same path.
+// Everything the cloud says is also kept here so the router can cache it.
+let _lastCloudReply = '';
 
-// Single choke point for UI updates. Sends to the content-script orb on the
-// active tab AND mirrors conversational messages to extension pages (the side
-// panel / popup) so every surface stays in sync. Persists spoken replies.
+/** The most recent thing the cloud tier said. Consumed by smart-router. */
+export function lastCloudReply(): string { return _lastCloudReply; }
+
 function safeSendMessage(tabId: number | undefined, msg: any) {
-  if (tabId !== undefined && tabId !== null) {
-    chrome.tabs.sendMessage(tabId, msg).catch(() => { /* ignore missing receiver errors */ });
-  }
-  if (msg.type === 'ECHO_SAY' || msg.type === 'ECHO_STATE' || msg.type === 'ECHO_USAGE') {
-    // Reaches the side panel / popup. No-op (caught) if none are open.
-    try { chrome.runtime.sendMessage(msg).catch(() => {}); } catch { /* ignore */ }
-  }
   if (msg.type === 'ECHO_SAY' && typeof msg.text === 'string') {
-    pushTranscript({ role: 'echo', text: msg.text });
+    // Accumulate multi-block replies so the cached answer is the whole thing.
+    _lastCloudReply = _lastCloudReply ? `${_lastCloudReply}\n${msg.text}` : msg.text;
+    busSay(tabId, msg.text, 3);
+    return;
   }
+  busSend(tabId, msg);
 }
 
 // --- Live usage metering (per task + per session) ---
@@ -424,7 +262,12 @@ function getEchoMemory(): Promise<any> {
   });
 }
 
-export async function processUserInput(userInput: string, tabId?: number) {
+export interface CloudOptions {
+  /** Set when the router already echoed the user's message to the transcript. */
+  skipEcho?: boolean;
+}
+
+export async function processUserInput(userInput: string, tabId?: number, opts: CloudOptions = {}) {
   abortCurrentWork();
   currentAbortController = new AbortController();
   const signal = currentAbortController.signal;
@@ -439,10 +282,9 @@ export async function processUserInput(userInput: string, tabId?: number) {
   }
 
   resetTaskUsage();
+  _lastCloudReply = '';   // fresh buffer so the router caches only this answer
 
-  // Record the user's message so the side panel transcript shows it immediately.
-  pushTranscript({ role: 'user', text: userInput });
-  try { chrome.runtime.sendMessage({ type: 'ECHO_USER_ECHO', text: userInput }).catch(() => {}); } catch { /* ignore */ }
+  if (!opts.skipEcho) echoUser(userInput);
 
   try {
     const config = await getAuthConfig();
@@ -491,12 +333,22 @@ export async function processUserInput(userInput: string, tabId?: number) {
       safeSendMessage(tabId!, { type: 'ECHO_STATE', state: 'Idle' });
       return;
     }
-    safeSendMessage(tabId!, { type: 'ECHO_SAY', text: 'Auth/Init Error: ' + err.message });
+    // No key configured is not a dead end any more — the local tiers cover a
+    // lot on their own, so say what still works instead of just erroring.
+    const noKey = /API Key/i.test(err.message || '');
+    safeSendMessage(tabId!, {
+      type: 'ECHO_SAY',
+      text: noKey
+        ? `${err.message}\n\nThat only limits complex tasks — I still work without a key: summarising pages, extracting emails/prices/links, filling forms, recording and replaying workflows, watching pages for changes, saving highlights, and remembering what you've read.`
+        : 'Auth/Init Error: ' + err.message,
+    });
     safeSendMessage(tabId!, { type: 'ECHO_STATE', state: 'Error' });
   }
 }
 
 async function runClaudeLoop(client: Anthropic, userInput: string, tabId: number, signal: AbortSignal, systemPrompt: string) {
+  // Mutable — updated when open_url creates a new tab or switch_tab changes focus.
+  let activeTabId = tabId;
   try {
     currentConversation = pruneClaude(currentConversation);
     currentConversation.push({ role: 'user', content: userInput });
@@ -504,11 +356,12 @@ async function runClaudeLoop(client: Anthropic, userInput: string, tabId: number
     // Prompt caching: mark the static system prompt + tools block so repeated
     // in-task requests bill them at the reduced cache-read rate on Claude.
     const cachedSystem = [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }] as any;
-    const claudeTools = SHARED_TOOLS.map((t, i) => ({
+    const activeTools = selectTools(userInput);
+    const claudeTools = activeTools.map((t, i) => ({
       name: t.name,
       description: t.description,
       input_schema: t.schema as any,
-      ...(i === SHARED_TOOLS.length - 1 ? { cache_control: { type: 'ephemeral' } } : {})
+      ...(i === activeTools.length - 1 ? { cache_control: { type: 'ephemeral' } } : {})
     })) as any;
 
     let isFinished = false;
@@ -517,8 +370,8 @@ async function runClaudeLoop(client: Anthropic, userInput: string, tabId: number
     while (!isFinished) {
       if (signal.aborted) throw new Error('Aborted by user');
       if (steps++ >= MAX_STEPS) {
-        safeSendMessage(tabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
-        safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+        safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
+        safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
         break;
       }
 
@@ -534,22 +387,25 @@ async function runClaudeLoop(client: Anthropic, userInput: string, tabId: number
       }, { signal });
 
       const cu: any = (response as any).usage || {};
-      accumulateUsage(tabId, (cu.input_tokens || 0) + (cu.cache_read_input_tokens || 0) + (cu.cache_creation_input_tokens || 0), cu.output_tokens || 0);
+      accumulateUsage(activeTabId, (cu.input_tokens || 0) + (cu.cache_read_input_tokens || 0) + (cu.cache_creation_input_tokens || 0), cu.output_tokens || 0);
 
       currentConversation.push({ role: 'assistant', content: response.content });
       let toolUsed = false;
 
       for (const block of response.content) {
         if (block.type === 'text') {
-          safeSendMessage(tabId, { type: 'ECHO_SAY', text: block.text });
+          safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: block.text });
         } else if (block.type === 'tool_use') {
           toolUsed = true;
-          safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Executing ' + block.name + '...' });
-          
+          safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Executing ' + block.name + '...' });
+
           try {
-            const result = await executeTool(block.name, block.input, tabId);
+            const result = await executeTool(block.name, block.input, activeTabId);
+            // Keep activeTabId in sync so subsequent DOM actions hit the right tab.
+            if (block.name === 'open_url' && (result as any)?.newTabId) activeTabId = (result as any).newTabId;
+            if (block.name === 'switch_tab' && (block.input as any)?.tabId) activeTabId = Number((block.input as any).tabId);
             let toolResultContent: Anthropic.ToolResultBlockParam['content'] = [];
-            
+
             if (block.name === 'screenshot' && result.dataUrl) {
               const base64Data = result.dataUrl.split(',')[1];
               toolResultContent.push({
@@ -564,7 +420,7 @@ async function runClaudeLoop(client: Anthropic, userInput: string, tabId: number
               role: 'user',
               content: [{ type: 'tool_result', tool_use_id: block.id, content: toolResultContent }]
             });
-            
+
           } catch (e: any) {
             currentConversation.push({
               role: 'user',
@@ -576,16 +432,16 @@ async function runClaudeLoop(client: Anthropic, userInput: string, tabId: number
 
       if (!toolUsed) {
         isFinished = true;
-        safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+        safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
       }
     }
   } catch (err: any) {
     if (err.message === 'Aborted by user' || err.name === 'AbortError') {
-      safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+      safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
       return;
     }
-    safeSendMessage(tabId, { type: 'ECHO_SAY', text: 'Claude Error: ' + err.message });
-    safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Error' });
+    safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: 'Claude Error: ' + err.message });
+    safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Error' });
   }
 }
 
@@ -611,6 +467,7 @@ function toGeminiSchema(schema: any): any {
 }
 
 async function runGeminiLoop(client: GoogleGenAI, userInput: string, tabId: number, signal: AbortSignal, systemPrompt: string) {
+  let activeTabId = tabId;
   try {
     currentGeminiConversation = pruneGemini(currentGeminiConversation);
     currentGeminiConversation.push({ role: "user", parts: [{ text: userInput }] });
@@ -628,10 +485,11 @@ async function runGeminiLoop(client: GoogleGenAI, userInput: string, tabId: numb
     ];
     let modelIndex = 0;
 
+    const activeTools = selectTools(userInput);
     while (!isFinished) {
       if (steps++ >= MAX_STEPS) {
-        safeSendMessage(tabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
-        safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+        safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
+        safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
         break;
       }
       compressGemini(currentGeminiConversation);
@@ -641,7 +499,7 @@ async function runGeminiLoop(client: GoogleGenAI, userInput: string, tabId: numb
       while (modelIndex < GEMINI_MODELS.length && !succeeded) {
         if (signal.aborted) throw new Error('Aborted by user');
         try {
-          const functionDeclarations = SHARED_TOOLS.map(t => ({
+          const functionDeclarations = activeTools.map(t => ({
             name: t.name,
             description: t.description,
             parameters: toGeminiSchema(t.schema)
@@ -670,11 +528,11 @@ async function runGeminiLoop(client: GoogleGenAI, userInput: string, tabId: numb
 
       if (!succeeded || !response) throw new Error('All Gemini models are unavailable (404). Try using Claude instead.');
 
-      accumulateUsage(tabId, response.usageMetadata?.promptTokenCount || 0, response.usageMetadata?.candidatesTokenCount || 0);
+      accumulateUsage(activeTabId, response.usageMetadata?.promptTokenCount || 0, response.usageMetadata?.candidatesTokenCount || 0);
 
       const content = response.candidates?.[0]?.content;
       if (!content) break;
-      
+
       currentGeminiConversation.push({ role: "model", parts: content.parts || [] });
 
       const parts = content.parts ?? [];
@@ -683,53 +541,95 @@ async function runGeminiLoop(client: GoogleGenAI, userInput: string, tabId: numb
       for (const p of parts) {
         if (p.text?.trim()) {
           if (signal.aborted) throw new Error('Aborted by user');
-          safeSendMessage(tabId, { type: 'ECHO_SAY', text: p.text.trim() });
+          safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: p.text.trim() });
         }
       }
 
       if (!calls.length) {
         isFinished = true;
-        safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+        safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
         break;
       }
 
       const responseParts: any[] = [];
-      
+
       for (const call of calls) {
         if (!call || !call.name) continue;
-        safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Executing ' + call.name + '...' });
+        safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Executing ' + call.name + '...' });
         try {
-          const result = await executeTool(call.name, call.args, tabId);
+          const result = await executeTool(call.name, call.args, activeTabId);
+          if (call.name === 'open_url' && (result as any)?.newTabId) activeTabId = (result as any).newTabId;
+          if (call.name === 'switch_tab' && call.args?.tabId) activeTabId = Number(call.args.tabId);
           if (call.name === 'screenshot' && result.dataUrl) {
-             const base64Data = result.dataUrl.split(',')[1];
-             responseParts.push({
-               functionResponse: { name: call.name, response: { result: "Screenshot taken successfully." } }
-             });
-             responseParts.push({
-               inlineData: { mimeType: 'image/png', data: base64Data }
-             });
+            const base64Data = result.dataUrl.split(',')[1];
+            responseParts.push({ functionResponse: { name: call.name, response: { result: "Screenshot taken successfully." } } });
+            responseParts.push({ inlineData: { mimeType: 'image/png', data: base64Data } });
           } else {
-             responseParts.push({
-               functionResponse: { name: call.name, response: { result } }
-             });
+            responseParts.push({ functionResponse: { name: call.name, response: { result } } });
           }
         } catch (e: any) {
-           responseParts.push({
-             functionResponse: { name: call.name, response: { error: String(e.message || e) } }
-           });
+          responseParts.push({ functionResponse: { name: call.name, response: { error: String(e.message || e) } } });
         }
       }
-      
+
       currentGeminiConversation.push({ role: "user", parts: responseParts });
     }
   } catch (err: any) {
     if (err.message === 'Aborted by user' || err.name === 'AbortError') {
-      safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+      safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
       return;
     }
-    safeSendMessage(tabId, { type: 'ECHO_SAY', text: 'Gemini Error: ' + err.message });
-    safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Error' });
+    safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: 'Gemini Error: ' + err.message });
+    safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Error' });
   }
+}
+
+// Extract a balanced { ... } JSON object starting at `start` in `text`.
+function extractJsonAt(text: string, start: number): string | null {
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}') { depth--; if (depth === 0) return text.slice(start, i + 1); }
+  }
+  return null;
+}
+
+// Llama models on Groq/Together sometimes emit tool calls as malformed text
+// like `<function=open_url{"url":"..."}>` (or `<function=name>{...}</function>`)
+// instead of a structured tool_call. Parse those back into {name, args} so we
+// can run them anyway. Scoped to each <function=…> block to avoid bleed.
+function extractLooseToolCalls(text: string): { name: string; args: any }[] {
+  const calls: { name: string; args: any }[] = [];
+  if (!text || typeof text !== 'string') return calls;
+  const re = /<function=([a-zA-Z0-9_]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const name = m[1];
+    const after = m.index + m[0].length;
+    const nextTag = text.indexOf('<function=', after);
+    const closeTag = text.indexOf('</function>', after);
+    let end = text.length;
+    if (closeTag !== -1) end = Math.min(end, closeTag);
+    if (nextTag !== -1) end = Math.min(end, nextTag);
+    const region = text.slice(after, end);
+    const braceIdx = region.indexOf('{');
+    let args: any = {};
+    if (braceIdx !== -1) {
+      const jsonStr = extractJsonAt(region, braceIdx);
+      if (jsonStr) { try { args = JSON.parse(jsonStr); } catch { args = {}; } }
+    }
+    calls.push({ name, args });
+  }
+  return calls;
+}
+
+// Normalize recovered {name,args} into OpenAI tool_calls shape.
+function looseToToolCalls(loose: { name: string; args: any }[]): any[] {
+  return loose.map((c, i) => ({
+    id: `recovered_${Date.now()}_${i}`,
+    type: 'function',
+    function: { name: c.name, arguments: JSON.stringify(c.args ?? {}) }
+  }));
 }
 
 // Generic OpenAI-compatible loop (used by Together AI & OpenRouter)
@@ -742,15 +642,13 @@ async function runOpenAICompatibleLoop(
   signal: AbortSignal,
   systemPrompt: string
 ) {
+  let activeTabId = tabId;
   try {
-    // Build tools in OpenAI function-calling format
-    const openaiTools = SHARED_TOOLS.map(t => ({
+    // Build tools in OpenAI function-calling format — only the tools this
+    // request needs (dynamic selection cuts schema tokens by ~60–70 %).
+    const openaiTools = selectTools(userInput).map(t => ({
       type: 'function',
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.schema
-      }
+      function: { name: t.name, description: t.description, parameters: t.schema }
     }));
 
     currentOpenAIConversation = pruneOpenAI(currentOpenAIConversation);
@@ -762,12 +660,11 @@ async function runOpenAICompatibleLoop(
     while (!isFinished) {
       if (signal.aborted) throw new Error('Aborted by user');
       if (steps++ >= MAX_STEPS) {
-        safeSendMessage(tabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
-        safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+        safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: "That took more steps than expected, so I've stopped. Want me to keep going?" });
+        safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
         break;
       }
 
-      // Collapse stale tool outputs so per-request size stays bounded.
       compressOpenAI(currentOpenAIConversation);
 
       const res = await fetch(endpoint, {
@@ -780,10 +677,7 @@ async function runOpenAICompatibleLoop(
         },
         body: JSON.stringify({
           model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...currentOpenAIConversation
-          ],
+          messages: [{ role: 'system', content: systemPrompt }, ...currentOpenAIConversation],
           tools: openaiTools,
           tool_choice: 'auto',
           max_tokens: 900
@@ -791,41 +685,62 @@ async function runOpenAICompatibleLoop(
         signal
       });
 
+      let msg: any;
+
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`API Error ${res.status}: ${errText}`);
+        // Friendly rate-limit message instead of a cryptic 429 dump.
+        if (res.status === 429) {
+          throw new Error('Rate limit reached — please wait a moment then try again. (Free tier quota: ~6,000 tokens/min on Groq.)');
+        }
+        // Groq/Llama 400: model emitted a malformed text tool call — recover it.
+        let recovered: any[] | null = null;
+        if (res.status === 400 && errText.includes('failed_generation')) {
+          try {
+            const fg = JSON.parse(errText)?.error?.failed_generation || '';
+            const loose = extractLooseToolCalls(fg);
+            if (loose.length) recovered = looseToToolCalls(loose);
+          } catch { /* fall through */ }
+        }
+        if (!recovered) throw new Error(`API Error ${res.status}: ${errText.slice(0, 300)}`);
+        msg = { role: 'assistant', content: null, tool_calls: recovered };
+      } else {
+        const data = await res.json();
+        accumulateUsage(activeTabId, data.usage?.prompt_tokens || 0, data.usage?.completion_tokens || 0);
+        msg = data.choices?.[0]?.message;
+        if (!msg) throw new Error('Empty response from API');
+        // Some models leak tool calls as plain text — recover them.
+        if ((!msg.tool_calls || msg.tool_calls.length === 0) && typeof msg.content === 'string') {
+          const loose = extractLooseToolCalls(msg.content);
+          if (loose.length) msg = { role: 'assistant', content: null, tool_calls: looseToToolCalls(loose) };
+        }
       }
-
-      const data = await res.json();
-      accumulateUsage(tabId, data.usage?.prompt_tokens || 0, data.usage?.completion_tokens || 0);
-      const choice = data.choices?.[0];
-      const msg = choice?.message;
-
-      if (!msg) throw new Error('Empty response from API');
 
       currentOpenAIConversation.push(msg);
 
-      // Handle text response
-      if (msg.content && msg.content.trim()) {
-        safeSendMessage(tabId, { type: 'ECHO_SAY', text: msg.content.trim() });
+      if (msg.content && typeof msg.content === 'string' && msg.content.trim()) {
+        safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: msg.content.trim() });
       }
 
-      // Handle tool calls
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         const toolResults: any[] = [];
 
         for (const tc of msg.tool_calls) {
-          const toolName = tc.function.name;
-          const toolArgs = JSON.parse(tc.function.arguments || '{}');
+          const toolName = tc.function?.name;
+          if (!toolName) continue;
+          let toolArgs: any = {};
+          try { toolArgs = JSON.parse(tc.function.arguments || '{}'); } catch { toolArgs = {}; }
 
-          safeSendMessage(tabId, { type: 'ECHO_STATE', state: `Executing ${toolName}...` });
+          safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: `Executing ${toolName}...` });
 
           let resultContent: string;
           try {
-            const result = await executeTool(toolName, toolArgs, tabId);
+            const result = await executeTool(toolName, toolArgs, activeTabId);
+            // Track tab changes so subsequent DOM actions hit the right tab.
+            if (toolName === 'open_url' && (result as any)?.newTabId) activeTabId = (result as any).newTabId;
+            if (toolName === 'switch_tab' && toolArgs?.tabId) activeTabId = Number(toolArgs.tabId);
             if (toolName === 'screenshot' && result.dataUrl) {
-              // For screenshot, we just tell the model it was taken (most free models don't support vision)
-              resultContent = 'Screenshot captured. Note: Image vision may not be available on this model. Use read_screen for text-based analysis.';
+              resultContent = 'Screenshot captured. Vision not available on this model — use read_screen for text-based analysis.';
             } else {
               resultContent = JSON.stringify(result);
             }
@@ -833,28 +748,21 @@ async function runOpenAICompatibleLoop(
             resultContent = 'Error: ' + e.message;
           }
 
-          toolResults.push({
-            role: 'tool',
-            tool_call_id: tc.id,
-            content: resultContent
-          });
+          toolResults.push({ role: 'tool', tool_call_id: tc.id, content: resultContent });
         }
 
-        // Push all tool results back
         currentOpenAIConversation.push(...toolResults);
-
       } else {
-        // No tool calls — we're done
         isFinished = true;
-        safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+        safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
       }
     }
   } catch (err: any) {
     if (err.message === 'Aborted by user' || err.name === 'AbortError') {
-      safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Idle' });
+      safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Idle' });
       return;
     }
-    safeSendMessage(tabId, { type: 'ECHO_SAY', text: 'AI Error: ' + err.message });
-    safeSendMessage(tabId, { type: 'ECHO_STATE', state: 'Error' });
+    safeSendMessage(activeTabId, { type: 'ECHO_SAY', text: 'AI Error: ' + err.message });
+    safeSendMessage(activeTabId, { type: 'ECHO_STATE', state: 'Error' });
   }
 }

@@ -1,8 +1,29 @@
+// Poll until a tab's status is 'complete' or the timeout fires.
+// Resolves early on chrome.runtime.lastError so callers never hang.
+function waitForTabLoad(tabId: number, timeout = 9000): Promise<void> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const poll = () => {
+      chrome.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError || !tab || tab.status === 'complete') { resolve(); return; }
+        if (Date.now() - start > timeout) { resolve(); return; }
+        setTimeout(poll, 300);
+      });
+    };
+    setTimeout(poll, 700); // give the navigation a moment to start
+  });
+}
+
 // Tools that run inside the page and are forwarded to the content script.
+// The second group is used by the local (Tier 0/1) stack rather than the model.
 const DOM_ACTIONS = new Set([
   'read_screen', 'click_element', 'type_text', 'press_key',
   'scroll', 'find_on_page', 'get_page_text', 'extract_table',
-  'go_back', 'go_forward'
+  'go_back', 'go_forward',
+  // local-stack actions
+  'extract_pattern', 'fill_form', 'click_selector', 'read_value',
+  'record_start', 'record_stop', 'play_step',
+  'render_highlights', 'clear_highlights',
 ]);
 
 export async function executeTool(toolName: string, args: any, tabId?: number): Promise<any> {
@@ -29,22 +50,30 @@ export async function executeTool(toolName: string, args: any, tabId?: number): 
     }
 
     case 'open_url': {
-      return new Promise((resolve, reject) => {
+      // Create the tab, wait for it to fully load, then return the NEW tab's id.
+      // The brain loops watch for `newTabId` in the result and update their
+      // activeTabId so all subsequent DOM actions go to the right tab.
+      const newTab = await new Promise<chrome.tabs.Tab>((resolve, reject) => {
         chrome.tabs.create({ url: args.url }, (tab) => {
           if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-          else resolve({ tabId: tab.id });
+          else resolve(tab);
         });
       });
+      await waitForTabLoad(newTab.id!);
+      return { success: true, newTabId: newTab.id, message: `Opened ${args.url} in a new tab (id: ${newTab.id}). Use read_screen now to see it.` };
     }
 
     case 'navigate': {
       if (!tabId) throw new Error('No active tab to navigate');
-      return new Promise((resolve, reject) => {
-        chrome.tabs.update(tabId, { url: args.url }, (tab) => {
+      await new Promise<void>((resolve, reject) => {
+        chrome.tabs.update(tabId, { url: args.url }, () => {
           if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-          else resolve({ success: true, message: `Navigating to ${args.url}` });
+          else resolve();
         });
       });
+      // Wait for the page to finish loading before the brain calls read_screen.
+      await waitForTabLoad(tabId);
+      return { success: true, message: `Navigated to ${args.url} — page loaded, ready for read_screen.` };
     }
 
     case 'list_tabs': {

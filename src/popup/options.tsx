@@ -37,6 +37,13 @@ function Options() {
   const [groqModel, setGroqModel] = useState(GROQ_MODELS[0].id);
   const [handsfree, setHandsfree] = useState(false);
   const [status, setStatus] = useState('');
+  // Local-first stack (tiers 0-2). Defaults on — this is what saves the quota.
+  const [localFirst, setLocalFirst] = useState(true);
+  const [useCache, setUseCache] = useState(true);
+  const [useLocalLlm, setUseLocalLlm] = useState(true);
+  const [autoIndex, setAutoIndex] = useState(true);
+  const [passiveSuggest, setPassiveSuggest] = useState(true);
+  const [report, setReport] = useState('');
 
   useEffect(() => {
     chrome.storage.local.get([
@@ -55,6 +62,20 @@ function Options() {
       if (result.openrouterModel) setOpenrouterModel(result.openrouterModel as string);
       if (result.groqModel) setGroqModel(result.groqModel as string);
     });
+
+    // Router settings live under their own key and default to enabled.
+    chrome.storage.local.get(['echo_local_settings'], (r) => {
+      const s = (r.echo_local_settings || {}) as any;
+      setLocalFirst(s.localFirst !== false);
+      setUseCache(s.useCache !== false);
+      setUseLocalLlm(s.useLocalLlm !== false);
+      setAutoIndex(s.autoIndex !== false);
+      setPassiveSuggest(s.passiveSuggest !== false);
+    });
+
+    chrome.runtime.sendMessage({ type: 'ECHO_ROUTER_REPORT' })
+      .then((r: any) => { if (r?.text) setReport(r.text); })
+      .catch(() => {});
   }, []);
 
   const saveOptions = () => {
@@ -69,11 +90,24 @@ function Options() {
       openrouterModel,
       groqModel,
       echo_handsfree: handsfree,
+      echo_local_settings: { localFirst, useCache, useLocalLlm, autoIndex, passiveSuggest },
     }, () => {
       setStatus('✓ Saved!');
       setTimeout(() => setStatus(''), 2000);
     });
   };
+
+  const Toggle = ({ id, checked, onChange, label, hint }: {
+    id: string; checked: boolean; onChange: (v: boolean) => void; label: string; hint: string;
+  }) => (
+    <div className="echo-toggle">
+      <input id={id} type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} />
+      <div>
+        <label htmlFor={id}>{label}</label>
+        <small>{hint}</small>
+      </div>
+    </div>
+  );
 
   return (
     <div className="options-container">
@@ -186,18 +220,40 @@ function Options() {
         </>
       )}
 
-      <div className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
-        <input
-          id="handsfree"
-          type="checkbox"
-          checked={handsfree}
-          onChange={(e) => setHandsfree(e.target.checked)}
-          style={{ width: 'auto' }}
-        />
-        <label htmlFor="handsfree" style={{ margin: 0 }}>
-          Hands-free mode (auto-listen after ECHO replies)
-        </label>
-      </div>
+      <hr style={{ borderColor: '#333', margin: '18px 0 14px' }} />
+      <h3 className="section-title">Local Brain — saves your API quota</h3>
+      {report && <div className="router-report">{report.split('\n').map((l, i) => <div key={i}>{l}</div>)}</div>}
+
+      <Toggle
+        id="localFirst" checked={localFirst} onChange={setLocalFirst}
+        label="Answer locally first"
+        hint="Try instant, cached and on-device answers before spending API quota. Turn off to always use the cloud."
+      />
+      <Toggle
+        id="useCache" checked={useCache} onChange={setUseCache}
+        label="Reuse past answers"
+        hint="Replay a stored answer when you ask the same thing again."
+      />
+      <Toggle
+        id="useLocalLlm" checked={useLocalLlm} onChange={setUseLocalLlm}
+        label="On-device summarising"
+        hint="Summarise and answer page questions on your own machine — uses Chrome's built-in AI when available."
+      />
+      <Toggle
+        id="autoIndex" checked={autoIndex} onChange={setAutoIndex}
+        label="Remember pages you read"
+        hint="Builds a private, local index so you can ask 'what was that article about…'. Never leaves your browser."
+      />
+      <Toggle
+        id="passiveSuggest" checked={passiveSuggest} onChange={setPassiveSuggest}
+        label="Proactive suggestions"
+        hint="Offer help when a page has a long article or an empty form. No AI runs until you accept."
+      />
+      <Toggle
+        id="handsfree" checked={handsfree} onChange={setHandsfree}
+        label="Hands-free mode"
+        hint="Re-open the mic automatically after ECHO finishes speaking."
+      />
 
       <button onClick={saveOptions} style={{ marginBottom: '10px' }}>Save Settings</button>
       {status && <span className="status-msg">{status}</span>}
